@@ -1,3 +1,6 @@
+
+
+
 # Videoto3D
 
 **Videoto3D** 是一个本地优先（local-first）的视频到 3D 重建 Studio。  
@@ -9,9 +12,12 @@
 
 ## 🎬 教学视频 / Workflow Tutorial
 
+https://github.com/user-attachments/assets/b8d11389-6d23-45dc-a846-226d778f2979
+
 <!-- WORKFLOW_VIDEO_BEGIN -->
 
 [![Videoto3D Workflow Tutorial](docs/assets/demo/workflow-video-cover.svg)](https://github.com/HUliangwei/Videoto3D/releases/download/v1.2.0/Videoto3D_Workflow_Tutorial_v1.2.0.mp4)
+
 
 **4 min · 17 MB · Full Workflow Tutorial**
 
