@@ -1,0 +1,29 @@
+# Old Git metadata backup
+.git_old_*/
+
+# Local environments / generated data
+env/
+runtime/
+workspace/
+
+# Local machine configuration
+config/tool.json
+
+# Frontend generated files
+gui/node_modules/
+gui/control/web/dist/
+gui/viewer/demo-dist/
+*.tsbuildinfo
+
+# Tool-generated logs
+*.log
+
+# Python generated files
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local archives / migration packages
+*.zip
+# Local resolved tool paths
+config/tools.json

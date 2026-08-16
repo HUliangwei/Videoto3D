@@ -1,0 +1,4 @@
+node_modules/
+control/web/dist/
+viewer/demo-dist/
+*.log
