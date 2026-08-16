@@ -1,6 +1,3 @@
-
-
-
 # Videoto3D
 
 **Videoto3D** 是一个本地优先（local-first）的视频到 3D 重建 Studio。  
@@ -14,12 +11,7 @@
 
 https://github.com/user-attachments/assets/b8d11389-6d23-45dc-a846-226d778f2979
 
-<!-- WORKFLOW_VIDEO_BEGIN -->
-
-[![Videoto3D Workflow Tutorial](docs/assets/demo/workflow-video-cover.svg)](https://github.com/HUliangwei/Videoto3D/releases/download/v1.2.0/Videoto3D_Workflow_Tutorial_v1.2.0.mp4)
-
-
-**4 min · 17 MB · Full Workflow Tutorial**
+**4 min · Full Workflow Tutorial**
 
 完整演示：
 
@@ -36,10 +28,8 @@ New Run
 → Quality Report
 ```
 
-> 教学视频作为 **GitHub Release `v1.2.0` Asset** 发布，不进入普通 Git 历史。  
-> 本地源文件保存在 `recordings/Videoto3D_Workflow_Tutorial_v1.2.0.mp4`，`recordings/` 保持在 `.gitignore` 中。
-
-<!-- WORKFLOW_VIDEO_END -->
+> 视频使用 GitHub `user-attachments` 直接嵌入 README 播放。  
+> 本地原始录像仍保存在 `recordings/`，该目录保持在 `.gitignore` 中。
 
 ---
 
