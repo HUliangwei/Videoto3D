@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { AssetViewer, type AssetType } from '@videoto3d/viewer'
+import { AssetViewer } from '@videoto3d/viewer'
 import { api } from '../api'
 import type { JobInfo, MeshSettings, RunDetail, SplatSettings } from '../types'
 import { QualityPanel } from '../components/QualityPanel'
@@ -7,6 +7,7 @@ import { StatusPill } from '../components/StatusPill'
 import { RoiSelector } from '../components/RoiSelector'
 import { JobPanel } from '../components/JobPanel'
 import { PathInspector } from '../components/PathInspector'
+import { ArtifactInspector } from '../components/ArtifactInspector'
 
 const DEFAULT_MESH: MeshSettings = {
   undistort_max_image_size: 2000,
@@ -33,7 +34,7 @@ function NumberField({ label, value, step = 1, onChange }: { label: string; valu
 export function RunDetailPage({ id, initialJobId, onBack, onJob }: { id: string; initialJobId?: string; onBack: () => void; onJob: (runId: string, job: JobInfo) => void }) {
   const [run, setRun] = useState<RunDetail | null>(null)
   const [error, setError] = useState('')
-  const [mode, setMode] = useState<AssetType>('glb')
+  const [mode, setMode] = useState<'glb' | 'splat'>('glb')
   const [jobId, setJobId] = useState<string | undefined>(initialJobId)
   const [jobTerminal, setJobTerminal] = useState(false)
   const [meshSettings, setMeshSettings] = useState<MeshSettings>(DEFAULT_MESH)
@@ -92,6 +93,8 @@ export function RunDetailPage({ id, initialJobId, onBack, onJob }: { id: string;
         <button className="primary-button" disabled={jobRunning} onClick={async () => { try { startJob(await api.routeSplat(id, splatSettings)) } catch (e) { setError(String(e)) } }}>{splatReady ? 'Run Splat Again' : 'Run Splat'}</button>
       </article>
     </div></section>}
+
+    <ArtifactInspector runId={id} refreshKey={run.updated_at ?? ''} />
 
     <section className="viewer-section"><div className="viewer-topbar"><div><div className="eyebrow">RESULT VIEWER</div><h2>{mode === 'glb' ? 'Mesh / GLB' : 'Gaussian Splat / PLY'}</h2></div><div className="segmented"><button className={mode === 'glb' ? 'selected' : ''} disabled={!run.assets.glb} onClick={() => setMode('glb')}>Mesh</button><button className={mode === 'splat' ? 'selected' : ''} disabled={!run.assets.splat} onClick={() => setMode('splat')}>Splat</button></div></div><div className="viewer-frame">{asset ? <AssetViewer type={mode} src={asset} /> : <div className="viewer-empty">当前 Route 尚无可预览资产。</div>}<div className="viewer-caption"><span>{run.run_id}</span><span>{mode === 'glb' ? 'GLB · textured mesh' : 'PLY · cleaned Gaussian splat'}</span></div></div></section>
 

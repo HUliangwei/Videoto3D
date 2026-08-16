@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="810" viewBox="0 0 1440 810">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1017"/>
+      <stop offset="1" stop-color="#17110e"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="45%" r="60%">
+      <stop offset="0" stop-color="#f1a36b" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#f1a36b" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1440" height="810" rx="34" fill="url(#bg)"/>
+  <rect width="1440" height="810" rx="34" fill="url(#glow)"/>
+  <rect x="62" y="62" width="1316" height="686" rx="28" fill="none" stroke="#ffffff" stroke-opacity=".10"/>
+  <circle cx="720" cy="326" r="82" fill="#f1a36b" fill-opacity=".15" stroke="#f1a36b" stroke-opacity=".65" stroke-width="2"/>
+  <path d="M695 278 L782 326 L695 374 Z" fill="#f1a36b"/>
+  <text x="720" y="470" text-anchor="middle" fill="#f6f7f8" font-family="Segoe UI, Arial, sans-serif" font-size="52" font-weight="700">Videoto3D Workflow Tutorial</text>
+  <text x="720" y="525" text-anchor="middle" fill="#9da7b2" font-family="Segoe UI, Arial, sans-serif" font-size="24">Video → SAM2 → COLMAP → Mesh / Gaussian Splat</text>
+  <text x="720" y="592" text-anchor="middle" fill="#f1b689" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="600">FULL TUTORIAL · RECORDING IN PROGRESS</text>
+  <text x="720" y="662" text-anchor="middle" fill="#6f7882" font-family="Segoe UI, Arial, sans-serif" font-size="18">Click to open the recording / publishing guide</text>
+</svg>

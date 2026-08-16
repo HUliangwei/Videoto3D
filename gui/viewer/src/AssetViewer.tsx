@@ -2,9 +2,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark'
 
-export type AssetType = 'glb' | 'splat'
+export type AssetType = 'glb' | 'splat' | 'pointcloud' | 'mesh-ply'
 
 export interface AssetViewerProps {
   type: AssetType
@@ -32,6 +33,12 @@ function disposeObject(object: THREE.Object3D) {
     const materials = Array.isArray(material) ? material : material ? [material] : []
     materials.forEach((item) => item.dispose())
   })
+}
+
+function typeLabel(type: AssetType) {
+  if (type === 'mesh-ply') return 'PLY MESH'
+  if (type === 'pointcloud') return 'POINT CLOUD'
+  return type.toUpperCase()
 }
 
 export function AssetViewer({ type, src, className, background = '#07090d', autoRotate = false, showToolbar = true }: AssetViewerProps) {
@@ -115,6 +122,7 @@ export function AssetViewer({ type, src, className, background = '#07090d', auto
       const rect = renderer.domElement.getBoundingClientRect()
       const pointer = new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
       const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(pointer, camera)
+      raycaster.params.Points.threshold = Math.max(distance / 250, 0.001)
       const hits = raycaster.intersectObjects(scene.children, true)
       const hit = hits.find((item) => item.object !== spark)
       if (hit) { controls.target.copy(hit.point); controls.update() }
@@ -125,6 +133,34 @@ export function AssetViewer({ type, src, className, background = '#07090d', auto
       new GLTFLoader().load(src, (gltf) => {
         loadedObject = gltf.scene; scene.add(gltf.scene); fitBox(new THREE.Box3().setFromObject(gltf.scene)); setStatus('ready')
       }, undefined, (reason) => { console.error(reason); setError('GLB 加载失败'); setStatus('error') })
+    } else if (type === 'pointcloud' || type === 'mesh-ply') {
+      new PLYLoader().load(src, (geometry) => {
+        geometry.computeBoundingBox()
+        const box = geometry.boundingBox?.clone() ?? new THREE.Box3().setFromBufferAttribute(geometry.getAttribute('position') as THREE.BufferAttribute)
+        const hasColor = geometry.hasAttribute('color')
+        if (type === 'pointcloud') {
+          const size = box.getSize(new THREE.Vector3())
+          const maxDim = Math.max(size.x, size.y, size.z, 0.001)
+          const material = new THREE.PointsMaterial({
+            size: Math.max(maxDim / 360, 0.0005),
+            sizeAttenuation: true,
+            vertexColors: hasColor,
+            color: hasColor ? 0xffffff : 0xd8dde3,
+          })
+          loadedObject = new THREE.Points(geometry, material)
+        } else {
+          if (!geometry.hasAttribute('normal')) geometry.computeVertexNormals()
+          const material = new THREE.MeshStandardMaterial({
+            color: hasColor ? 0xffffff : 0xc8cdd3,
+            vertexColors: hasColor,
+            roughness: 0.72,
+            metalness: 0.04,
+            side: THREE.DoubleSide,
+          })
+          loadedObject = new THREE.Mesh(geometry, material)
+        }
+        scene.add(loadedObject); fitBox(box); setStatus('ready')
+      }, undefined, (reason) => { console.error(reason); setError(`${typeLabel(type)} 加载失败`); setStatus('error') })
     } else {
       try {
         spark = new SparkRenderer({ renderer }); scene.add(spark)
@@ -159,7 +195,7 @@ export function AssetViewer({ type, src, className, background = '#07090d', auto
   const view = (name: ViewName) => actionsRef.current.view(name)
   const toggleRotate = () => { const next = !rotating; setRotating(next); actionsRef.current.rotate(next) }
   return <div ref={hostRef} className={className} style={{ position:'relative', width:'100%', height:'100%', overflow:'hidden' }}>
-    {status === 'loading' && <div style={overlayStyle}>Loading {type.toUpperCase()}…</div>}
+    {status === 'loading' && <div style={overlayStyle}>Loading {typeLabel(type)}…</div>}
     {status === 'error' && <div style={overlayStyle}>{error}</div>}
     {showToolbar && <>
       <div style={toolbarStyle}>

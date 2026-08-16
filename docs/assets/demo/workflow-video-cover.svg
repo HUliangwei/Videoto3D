@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="810" viewBox="0 0 1440 810">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#070a0f"/><stop offset=".58" stop-color="#0b1118"/><stop offset="1" stop-color="#1a100b"/></linearGradient>
+<radialGradient id="a" cx="34%" cy="35%" r="55%"><stop offset="0" stop-color="#f0a46c" stop-opacity=".28"/><stop offset="1" stop-color="#f0a46c" stop-opacity="0"/></radialGradient>
+<radialGradient id="c" cx="80%" cy="62%" r="48%"><stop offset="0" stop-color="#5da4ad" stop-opacity=".20"/><stop offset="1" stop-color="#5da4ad" stop-opacity="0"/></radialGradient>
+</defs>
+<rect width="1440" height="810" rx="36" fill="url(#bg)"/><rect width="1440" height="810" rx="36" fill="url(#a)"/><rect width="1440" height="810" rx="36" fill="url(#c)"/>
+<rect x="50" y="50" width="1340" height="710" rx="28" fill="none" stroke="#fff" stroke-opacity=".10"/>
+<text x="92" y="125" fill="#f0a46c" font-family="Segoe UI,Arial" font-size="21" font-weight="700" letter-spacing="4">VIDEOTO3D · V1.2.0</text>
+<text x="92" y="225" fill="#f7f8fa" font-family="Segoe UI,Arial" font-size="72" font-weight="750">Full Workflow Tutorial</text>
+<text x="92" y="292" fill="#a5afb9" font-family="Segoe UI,Arial" font-size="28">Video → SAM2 → COLMAP → Mesh / Gaussian Splat</text>
+<g transform="translate(92 360)"><rect width="214" height="66" rx="33" fill="#f0a46c"/><polygon points="62,18 62,48 93,33" fill="#11151a"/><text x="140" y="41" text-anchor="middle" fill="#11151a" font-family="Segoe UI,Arial" font-size="21" font-weight="750">PLAY</text></g>
+<text x="92" y="535" fill="#f5f6f7" font-family="Segoe UI,Arial" font-size="25" font-weight="650">Shared</text>
+<text x="92" y="577" fill="#87929d" font-family="Segoe UI,Arial" font-size="20">Frames · Masks · Sparse SfM</text>
+<text x="505" y="535" fill="#f5f6f7" font-family="Segoe UI,Arial" font-size="25" font-weight="650">Mesh Route</text>
+<text x="505" y="577" fill="#87929d" font-family="Segoe UI,Arial" font-size="20">Dense · Mesh · Texture · GLB</text>
+<text x="962" y="535" fill="#f5f6f7" font-family="Segoe UI,Arial" font-size="25" font-weight="650">Splat Route</text>
+<text x="962" y="577" fill="#87929d" font-family="Segoe UI,Arial" font-size="20">Brush · Raw · Cleanup · PLY</text>
+<text x="92" y="692" fill="#f1b88f" font-family="Segoe UI,Arial" font-size="21" font-weight="650">4 MIN · 17 MB · COMPLETE LOCAL WORKFLOW</text>
+</svg>

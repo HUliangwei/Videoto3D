@@ -1,13 +1,20 @@
-"""FastAPI application for the Videoto3D V1.1.2 local control Studio."""
+"""FastAPI application for the Videoto3D V1.2.0 local control Studio."""
 
 import json
-
+import mimetypes
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from gui.control.server.artifacts import (
+    build_artifact_catalog,
+    colmap_model_as_ply,
+    resolve_artifact_file,
+    resolve_colmap_model,
+    resolve_sequence_item,
+)
 from gui.control.server.jobs import JobConflictError, JobManager, JobNotFoundError
 from gui.control.server.service import (
     get_run_detail,
@@ -91,6 +98,10 @@ def _splat_args(run_id, payload):
     return args
 
 
+def _image_media(path):
+    return mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+
+
 def create_app(project_root=None, static_dir=None, shutdown_event=None, job_manager=None):
     project_root = Path(project_root or default_project_root()).resolve()
     if static_dir is None:
@@ -98,13 +109,13 @@ def create_app(project_root=None, static_dir=None, shutdown_event=None, job_mana
     static_dir = Path(static_dir).resolve() if static_dir else None
     jobs = job_manager or JobManager(project_root)
 
-    app = FastAPI(title="Videoto3D Studio", version="1.1.2")
+    app = FastAPI(title="Videoto3D Studio", version="1.2.0")
     app.state.project_root = project_root
     app.state.jobs = jobs
 
     @app.get("/api/health")
     def health():
-        return {"status": "ready", "project_root": str(project_root), "version": "1.1.2"}
+        return {"status": "ready", "project_root": str(project_root), "version": "1.2.0"}
 
     @app.get("/api/runs")
     def runs():
@@ -220,6 +231,55 @@ def create_app(project_root=None, static_dir=None, shutdown_event=None, job_mana
         try:
             return get_run_detail(project_root, run_id)
         except (FileNotFoundError, ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    # V1.2.0 read-only Pipeline Artifact Inspector API.
+    @app.get("/api/runs/{run_id}/artifacts")
+    def artifacts(run_id: str):
+        try:
+            return build_artifact_catalog(project_root, run_id)
+        except (FileNotFoundError, ValueError, RuntimeError, OSError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.get("/api/runs/{run_id}/artifacts/frames/{index}")
+    def artifact_frame(run_id: str, index: int):
+        try:
+            path = resolve_sequence_item(project_root, run_id, "frames", index)
+            return FileResponse(path, media_type=_image_media(path), filename=path.name)
+        except (FileNotFoundError, ValueError, RuntimeError, IndexError, OSError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.get("/api/runs/{run_id}/artifacts/masks/{index}")
+    def artifact_mask(run_id: str, index: int):
+        try:
+            path = resolve_sequence_item(project_root, run_id, "masks", index)
+            return FileResponse(path, media_type=_image_media(path), filename=path.name)
+        except (FileNotFoundError, ValueError, RuntimeError, IndexError, OSError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.get("/api/runs/{run_id}/artifacts/textures/{index}")
+    def artifact_texture(run_id: str, index: int):
+        try:
+            path = resolve_sequence_item(project_root, run_id, "textures", index)
+            return FileResponse(path, media_type=_image_media(path), filename=path.name)
+        except (FileNotFoundError, ValueError, RuntimeError, IndexError, OSError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.get("/api/runs/{run_id}/artifacts/file/{key}")
+    def artifact_file(run_id: str, key: str):
+        try:
+            if key in ("sparse", "object-sparse"):
+                model = resolve_colmap_model(project_root, run_id, key)
+                payload = colmap_model_as_ply(model)
+                return Response(
+                    content=payload,
+                    media_type="application/octet-stream",
+                    headers={"Content-Disposition": 'inline; filename="{}.ply"'.format(key)},
+                )
+            path = resolve_artifact_file(project_root, run_id, key)
+            media = "model/gltf-binary" if key == "glb" else "application/octet-stream"
+            return FileResponse(path, media_type=media, filename=path.name)
+        except (FileNotFoundError, ValueError, RuntimeError, OSError) as exc:
             raise HTTPException(status_code=404, detail=str(exc))
 
     @app.get("/api/runs/{run_id}/assets/{kind}")

@@ -8,6 +8,7 @@ workspace/
 
 # Local machine configuration
 config/tool.json
+config/tools.json
 
 # Frontend generated files
 gui/node_modules/
@@ -25,5 +26,8 @@ __pycache__/
 
 # Local archives / migration packages
 *.zip
-# Local resolved tool paths
-config/tools.json
+
+# Local workflow recording masters (keep raw video out of Git)
+recordings/
+docs/assets/demo/*.mp4
+docs/assets/demo/*.mov

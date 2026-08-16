@@ -31,6 +31,32 @@ export interface RuntimePaths {
   run: Record<string, string>
 }
 
+export type ArtifactState = 'ready' | 'partial' | 'pending' | 'missing'
+export type ArtifactKind = 'image-sequence' | 'mask-sequence' | 'pointcloud' | 'mesh-ply' | 'glb' | 'splat'
+export interface ArtifactItem {
+  key: string
+  label: string
+  stage: string
+  state: ArtifactState
+  kind: ArtifactKind
+  description: string
+  metrics: Record<string, string | number>
+  count?: number
+  asset_url?: string
+  frame_base_url?: string
+  mask_base_url?: string
+  image_base_url?: string
+}
+export interface ArtifactGroup {
+  key: 'shared' | 'mesh' | 'splat'
+  label: string
+  artifacts: ArtifactItem[]
+}
+export interface ArtifactCatalog {
+  run_id: string
+  groups: ArtifactGroup[]
+}
+
 export type JobStatus = 'running' | 'succeeded' | 'failed' | 'cancelled'
 export type ProgressStageStatus = 'done' | 'active' | 'pending' | 'error' | 'cancelled'
 export interface ProgressStage {
