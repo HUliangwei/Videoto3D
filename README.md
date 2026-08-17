@@ -1,9 +1,9 @@
 # Videoto3D
 
-**Videoto3D** 是一个本地优先（local-first）的视频到 3D 重建 Studio。  
+**Videoto3D** 是一个本地优先（local-first）的视频到 3D 重建 Studio。
 输入一段围绕目标物体拍摄的视频，在本地完成 **抽帧 → 主体分割 → 相机位姿恢复 → Mesh / Gaussian Splat 双路线重建 → 中间产物检查 → 质量报告 → Web 预览**。
 
-> 当前 Studio：**V1.3.0 · Turntable Capture Mode**
+> 当前 Studio：**V1.3.2 · Adaptive Turntable Angle**
 
 ---
 
@@ -28,7 +28,7 @@ New Run
 → Quality Report
 ```
 
-> 视频使用 GitHub `user-attachments` 直接嵌入 README 播放。  
+> 视频使用 GitHub `user-attachments` 直接嵌入 README 播放。
 > 本地原始录像仍保存在 `recordings/`，该目录保持在 `.gitignore` 中。
 
 ---
@@ -40,7 +40,7 @@ V1.3.0 在 New Run 中明确区分拍摄几何：
 | Mode | 实际拍摄 | Shared SfM |
 |---|---|---|
 | **Orbit Camera** | 物体静止，相机绕物体移动 | 完整 RGB 特征；背景纹理可参与相机定位 |
-| **Turntable** | 相机固定，刚体物体旋转 | SAM2 **mask-guided** COLMAP 特征，只让主体参与位姿恢复 |
+| **Turntable** | 相机固定，刚体物体旋转 | SAM2 主体特征 + **Uniform 360° Known Poses** + COLMAP triangulation |
 
 ```text
 Orbit Camera
@@ -59,6 +59,74 @@ Turntable 利用刚体相对运动的等价性：物体相对固定相机旋转�
 > Turntable 面向刚体目标。人物只有在姿势、表情、衣服与头发近似不变时才可尝试；走路、挥手、明显肢体运动属于 **Dynamic / 4D reconstruction**，不在当前流程范围内。
 
 详细说明：**[Turntable Capture Mode](docs/guides/Turntable_Capture_Mode.md)**
+
+---
+
+## Turntable Known-Pose · V1.3.1
+
+手动选择 **Turntable** 时，请把输入视频整理为“一次连续完整旋转”：
+
+```text
+Camera   固定，尽量保持水平
+Subject  刚体，尽量位于画面中心
+Motion   约 360°，基本匀速
+Video    尽量剪掉旋转前后的等待片段
+```
+
+Turntable 的 Shared Sparse 不再让 COLMAP 自由猜相机轨迹，而是：
+
+```text
+SAM2 Masks
+→ Object-only Features
+→ Uniform 360° Virtual Camera Poses
+→ CW / CCW COLMAP Point Triangulation
+→ 自动选择更强的 Sparse
+→ Camera Trajectory
+→ Mesh Route / Splat Route
+```
+
+**Orbit Camera 完全保持原来的 Full-RGB incremental SfM。** 两种采集方式最终仍进入同一套 Mesh / Splat 后半段。
+
+详细说明：[`docs/guides/Turntable_Capture_Mode_v131.md`](docs/guides/Turntable_Capture_Mode_v131.md)
+
+---
+
+## Adaptive Turntable Angle · V1.3.2
+
+手动选择 **Turntable** 后，目标仍然应单方向转约一整圈，但**不需要匀速**：
+
+```text
+慢 → 快 → 慢 → 稍快 → 慢
+```
+
+V1.3.2 会复用 COLMAP 的相邻帧几何验证结果估计每段实际 `Δθ`：
+
+```text
+SAM2 主体特征
+→ COLMAP two_view_geometries
+→ 每帧相对旋转量 Δθ
+→ 去除异常 / 平滑
+→ 归一化到完整一圈
+→ Adaptive Known Poses
+→ CW / CCW Point Triangulation
+→ Shared Sparse
+├→ Mesh Route
+└→ Splat Route
+```
+
+如果有效相邻几何不足，程序自动退回 Uniform 360°，不会直接崩溃。
+
+每个 Turntable Run 会生成：
+
+```text
+workspace/runs/<run_id>/colmap/turntable_angle_report.json
+```
+
+可用于检查 `valid_pair_ratio`、每段角度和累计角度。
+
+**Orbit Camera 路线完全不变。**
+
+详细说明：[`docs/guides/Turntable_Adaptive_Angle_v132.md`](docs/guides/Turntable_Adaptive_Angle_v132.md)
 
 ---
 

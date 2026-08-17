@@ -15,6 +15,7 @@ if __name__ == "__main__" and os.name == "nt":
 
 from pipeline.video import extract_frames
 from pipeline.colmap import run_sparse_reconstruction, launch_colmap_gui
+from pipeline.turntable import run_turntable_reconstruction
 from pipeline.openmvs import (
     DEFAULT_MESH_PROFILE,
     mesh_recipe_matches,
@@ -806,28 +807,75 @@ def run_view_masks(runtime, options):
 def run_sparse(resolved, options):
     run_id = validate_run_id(options["run"]); run_root, manifest = _require_run(run_id)
     capture_mode = normalize_capture_mode(manifest.get("capture_mode", DEFAULT_CAPTURE_MODE))
-    mask_path = sparse_mask_path(run_root, capture_mode)
-    if mask_path is not None:
+
+    if capture_mode == "turntable":
+        mask_path = run_root / "masks"
         validate_masks(run_root / "frames", mask_path)
-    result = run_sparse_reconstruction(
-        colmap_path=resolved["colmap"], frames_dir=run_root / "frames", colmap_dir=run_root / "colmap",
-        logs_dir=run_root / "logs" / "shared", overwrite=True, mask_path=mask_path,
-    )
+        result = run_turntable_reconstruction(
+            colmap_path=resolved["colmap"],
+            frames_dir=run_root / "frames",
+            masks_dir=mask_path,
+            colmap_dir=run_root / "colmap",
+            logs_dir=run_root / "logs" / "shared",
+            overwrite=True,
+        )
+        turntable = result.get("turntable", {})
+        pose_strategy = turntable.get("pose_strategy", "adaptive_360_epipolar")
+    else:
+        mask_path = None
+        result = run_sparse_reconstruction(
+            colmap_path=resolved["colmap"],
+            frames_dir=run_root / "frames",
+            colmap_dir=run_root / "colmap",
+            logs_dir=run_root / "logs" / "shared",
+            overwrite=True,
+            mask_path=None,
+        )
+        turntable = {}
+        pose_strategy = "incremental_sfm"
+
     invalidate_after_sparse(run_root); stats = result["stats"]
-    update_shared_stage(
-        run_root, "sparse", "ready", frame_count=result["frame_count"],
-        registered_images=stats.get("registered_images"), points3D=stats.get("points3D"),
-        mean_track_length=stats.get("mean_track_length"), mean_reprojection_error=stats.get("mean_reprojection_error"),
-        model=_rel(run_root, result["model"]), database=_rel(run_root, result["database"]),
-        capture_mode=capture_mode, mask_guided=(mask_path is not None),
-    )
-    print("=" * 68); print("Videoto3D V1.3 COLMAP Sparse Reconstruction"); print("Run         :", run_id)
+    stage_fields = {
+        "frame_count": result["frame_count"],
+        "registered_images": stats.get("registered_images"),
+        "points3D": stats.get("points3D"),
+        "mean_track_length": stats.get("mean_track_length"),
+        "mean_reprojection_error": stats.get("mean_reprojection_error"),
+        "model": _rel(run_root, result["model"]),
+        "database": _rel(run_root, result["database"]),
+        "capture_mode": capture_mode,
+        "mask_guided": (capture_mode == "turntable"),
+        "pose_strategy": pose_strategy,
+    }
+    if turntable:
+        angle_report = turntable.get("angle_report")
+        stage_fields.update({
+            "turntable_direction": turntable.get("selected_direction"),
+            "turntable_direction_sign": turntable.get("selected_direction_sign"),
+            "turntable_axis_px": turntable.get("axis_px"),
+            "turntable_translation": turntable.get("translation"),
+            "turntable_candidate_stats": turntable.get("candidate_stats"),
+            "turntable_angle_report": _rel(run_root, angle_report) if angle_report else None,
+            "turntable_angle_valid_pair_ratio": turntable.get("angle_valid_pair_ratio"),
+            "turntable_angle_fallback_uniform": turntable.get("angle_fallback_uniform"),
+        })
+    update_shared_stage(run_root, "sparse", "ready", **stage_fields)
+
+    print("=" * 68); print("Videoto3D V1.3.2 COLMAP Sparse Reconstruction"); print("Run         :", run_id)
     print("Capture     :", capture_mode_label(capture_mode))
-    print("Frames      :", result["frame_count"]); print("Mask mode   :", "SAM2 GUIDED" if mask_path is not None else "DISABLED (full RGB)")
+    print("Frames      :", result["frame_count"])
+    print("Pose model  :", pose_strategy)
+    print("Mask mode   :", "SAM2 GUIDED" if capture_mode == "turntable" else "DISABLED (full RGB)")
+    if turntable:
+        print("Direction   :", turntable.get("selected_direction", "-"))
+        print("Axis (px)   :", turntable.get("axis_px", "-"))
+        print("Angle pairs :", "{:.1%}".format(float(turntable.get("angle_valid_pair_ratio") or 0.0)))
+        print("Angle report:", turntable.get("angle_report", "-"))
     print("Database    :", result["database"]); print("Model       :", result["model"])
     print("Registered  :", stats.get("registered_images", "-"), "/", result["frame_count"]); print("3D Points   :", stats.get("points3D", "-"))
     print("Track Length:", stats.get("mean_track_length", "-")); print("Reproj Error:", stats.get("mean_reprojection_error", "-")); print("=" * 68)
     print("[READY] Inspect: python app.py view sparse --run {}".format(run_id)); return 0
+
 
 def run_view_sparse(resolved, options):
     run_id = validate_run_id(options["run"]); run_root, _ = _require_run(run_id); colmap_dir = run_root / "colmap"

@@ -54,6 +54,10 @@ Open → Investigating → Mitigated → Resolved → Closed
 | [BUG-0008](BUG-0008-pytest-discovery-and-httpx.md) | Mitigated | Medium | 根目录 pytest 误入 `env/`，外层 TestClient 缺 HTTPX | V1.3.0 Hotfix 1：限制 test discovery + 独立 dev/test dependencies |
 | [BUG-0009](BUG-0009-v130-regression-contract-drift.md) | Mitigated | Medium | V1.3 预发布全量测试暴露 README/Artifact contract drift | V1.3.0 Hotfix 2：恢复精确 CLI/工程参考并扩展 Camera Trajectory 测试契约 |
 
+| [BUG-0010](BUG-0010-v130-turntable-free-sfm-instability.md) | Mitigated | High | V1.3 Turntable mask-guided free SfM 导致 Mesh/Splat 共同几何失稳 | V1.3.1：Uniform 360° known poses + point triangulation |
+
+| [BUG-0011](BUG-0011-turntable-nonuniform-speed.md) | Mitigated | High | Uniform Turntable timing distorts non-uniform rotations | V1.3.2 adaptive per-frame angles |
+
 ## 新问题模板
 
 复制 [`_TEMPLATE.md`](_TEMPLATE.md)，分配下一个连续 BUG ID，并在本索引中增加一行。
