@@ -1,3 +1,4 @@
+export type CaptureMode = 'orbit_camera' | 'turntable'
 export type RouteSummary = 'COMPLETE' | 'IN PROGRESS' | 'PENDING' | 'BLOCKED'
 
 export interface RunSummary {
@@ -13,6 +14,7 @@ export interface RunSummary {
 
 export interface RunDetail {
   run_id: string
+  capture_mode: CaptureMode
   root: string
   created_at?: string
   updated_at?: string

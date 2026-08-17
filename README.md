@@ -3,7 +3,7 @@
 **Videoto3D** 是一个本地优先（local-first）的视频到 3D 重建 Studio。  
 输入一段围绕目标物体拍摄的视频，在本地完成 **抽帧 → 主体分割 → 相机位姿恢复 → Mesh / Gaussian Splat 双路线重建 → 中间产物检查 → 质量报告 → Web 预览**。
 
-> 当前 Studio：**V1.2.0 · Artifact Inspector**
+> 当前 Studio：**V1.3.0 · Turntable Capture Mode**
 
 ---
 
@@ -33,13 +33,42 @@ New Run
 
 ---
 
+## Capture Modes · 两种拍摄方式
+
+V1.3.0 在 New Run 中明确区分拍摄几何：
+
+| Mode | 实际拍摄 | Shared SfM |
+|---|---|---|
+| **Orbit Camera** | 物体静止，相机绕物体移动 | 完整 RGB 特征；背景纹理可参与相机定位 |
+| **Turntable** | 相机固定，刚体物体旋转 | SAM2 **mask-guided** COLMAP 特征，只让主体参与位姿恢复 |
+
+```text
+Orbit Camera
+Original RGB ──→ COLMAP ──→ Camera Geometry
+       │
+       └──→ SAM2 ──→ Mesh / Splat object constraints
+
+Turntable
+Original RGB ──→ SAM2 Masks ──→ COLMAP mask-guided features
+                                  ↓
+                         Equivalent Camera Geometry
+```
+
+Turntable 利用刚体相对运动的等价性：物体相对固定相机旋转，可以在物体坐标系中解释为“虚拟相机反向绕物体运动”。关键是 **不能让静止背景特征主导 SfM**。
+
+> Turntable 面向刚体目标。人物只有在姿势、表情、衣服与头发近似不变时才可尝试；走路、挥手、明显肢体运动属于 **Dynamic / 4D reconstruction**，不在当前流程范围内。
+
+详细说明：**[Turntable Capture Mode](docs/guides/Turntable_Capture_Mode.md)**
+
+---
+
 ## 30 秒看懂 Videoto3D
 
 ```mermaid
 flowchart TD
     A[Video] --> B[FFmpeg 抽帧]
     B --> C[SAM2 主体 Mask]
-    B --> D[COLMAP RGB SfM]
+    B --> D[COLMAP Shared SfM]
     C --> E[Shared Object Constraint]
     D --> F[Camera Poses + Sparse Point Cloud]
 
@@ -61,15 +90,14 @@ flowchart TD
     H4 --> H5[Clean Gaussian PLY]
 ```
 
-Videoto3D 的关键设计不是“把背景直接删掉再做 SfM”，而是：
+Videoto3D 根据拍摄几何选择 Shared SfM 的特征来源：
 
 ```text
-完整 RGB 图像 ──→ COLMAP ──→ 稳定的相机位姿 / Sparse Geometry
-       │
-       └──→ SAM2 ──→ 主体 Mask ──→ Mesh / Splat 两条路线的目标约束
+Orbit Camera : Original RGB ──→ COLMAP ──→ Camera Geometry
+Turntable    : RGB + SAM2 Mask ──→ mask-guided COLMAP ──→ Equivalent Camera Geometry
 ```
 
-这样既保留背景纹理对相机定位的帮助，又能在后续重建中尽量把结果限制到目标物体。
+两种模式都保留原始 RGB 图像；区别在于 Turntable 会用 SAM2 Mask 限制 COLMAP 的 Feature Extraction，避免固定背景主导位姿估计。后续 Mesh / Splat 继续共享同一套 Camera Geometry。
 
 ---
 
@@ -299,11 +327,22 @@ Camera Poses
 Sparse 3D Points
 ```
 
-Videoto3D 使用完整 RGB Frame 执行 COLMAP：
+Shared SfM 根据 Capture Mode 选择特征策略：
 
 ```text
-Feature Extraction
-→ Sequential Matching
+Orbit Camera
+Original RGB → COLMAP Feature Extraction
+
+Turntable
+Original RGB + SAM2 Mask
+→ COLMAP ImageReader.mask_path
+→ 只在主体区域提取 Feature
+```
+
+后续两种模式执行相同的几何求解链：
+
+```text
+Sequential Matching
 → Incremental Mapping
 → Triangulation
 → Bundle Adjustment
@@ -422,7 +461,7 @@ Object-only Sparse
 
 # Pipeline Artifacts · 中间产物检查
 
-V1.2.0 的重点是：**每个完成的阶段都应该能看见它到底产生了什么。**
+V1.3.0 延续 Artifact Inspector，并增加 **Camera Trajectory**：每个完成的阶段都应该能看见它到底产生了什么。
 
 Run 页面中的 Artifact Inspector 按三组显示：
 
@@ -432,6 +471,7 @@ Run 页面中的 Artifact Inspector 按三组显示：
 Frames
 SAM2 Masks
 COLMAP Sparse
+Camera Trajectory
 ```
 
 ### Mesh Route
@@ -674,6 +714,52 @@ python app.py view glb --run <run_id>
 python app.py view splat --run <run_id>
 ```
 
+### Exact Canonical CLI / Compatibility Reference
+
+下面这组命令由 `pipeline/cli_commands.py` 定义。README 保留精确字符串，既作为高级调试参考，也作为 CLI 文档回归契约。
+
+<!-- CLI_CONTRACT_V130_BEGIN -->
+
+```text
+python app.py env status
+python app.py env repair <core|seg|gui>
+python app.py gui
+python app.py doctor
+python app.py route mesh --run <run_id> [--input <video>] [--capture-mode orbit_camera|turntable] [--undistort-max-image-size 2000] [--dense-resolution-level 0] [--dense-number-views 0] [--dense-max-threads 0] [--refine-resolution-level 1] [--output-name name.glb] [--output <path>]
+python app.py route splat --run <run_id> [--input <video>] [--capture-mode orbit_camera|turntable] [--steps 30000] [--max-splats 2000000] [--max-resolution 1280] [--foreground-ratio 0.6] [--min-foreground-observations 2] [--cleanup-ratio 0.7] [--cleanup-min-views 3]
+python app.py run extract --run <run_id> --input <video> [--capture-mode orbit_camera|turntable]
+python app.py run mask --run <run_id> [--box x0,y0,x1,y1]
+python app.py run sparse --run <run_id>
+python app.py run mesh --run <run_id> [--undistort-max-image-size 2000] [--dense-resolution-level 0] [--dense-number-views 0] [--dense-max-threads 0] [--refine-resolution-level 1]
+python app.py run glb --run <run_id> [--output-name name.glb] [--output <path>]
+python app.py run splat --run <run_id> [--steps 30000] [--max-splats 2000000] [--max-resolution 1280] [--foreground-ratio 0.6] [--min-foreground-observations 2] [--cleanup-ratio 0.7] [--cleanup-min-views 3]
+python app.py view masks --run <run_id>
+python app.py view sparse --run <run_id>
+python app.py view splat-init --run <run_id>
+python app.py view mesh (--run <run_id> | --path <obj>)
+python app.py view glb (--run <run_id> | --path <glb>)
+python app.py view splat (--run <run_id> | --path <ply>)
+python app.py quality --run <run_id>
+python app.py runs list
+python app.py runs show <run_id>
+```
+
+兼容/工程参考：
+
+```text
+Run root              : workspace/runs/<run_id>/
+OpenMVS staged mask   : frame_0001.mask.png
+Raw Gaussian SPLAT    : splat/raw/<run_id>_raw.ply
+Quality JSON          : quality/report.json
+Bug registry          : docs/bugs/README.md
+GUI control           : gui/control
+Reusable viewer       : gui/viewer
+```
+
+`gui/control` 属于 Videoto3D Control Plane，负责调用 Core CLI；`gui/viewer` 保持通用 Viewer，不依赖 Run / COLMAP / OpenMVS 业务概念。
+
+<!-- CLI_CONTRACT_V130_END -->
+
 </details>
 
 ---
@@ -728,8 +814,8 @@ Multi-view Splat Cleanup
 1. **Run 数据只在 `workspace/` 中。**
 2. **第三方 Runtime / Model 只在 `runtime/` 中。**
 3. **项目 Python 环境只在 `env/` 中。**
-4. **COLMAP 使用完整 RGB 做 Shared SfM。**
-5. **SAM2 Mask 独立存在，不用 Masked RGB 替代 Shared SfM。**
+4. **Orbit Camera 使用完整 RGB 做 Shared SfM；Turntable 使用 SAM2 mask-guided Feature Extraction。**
+5. **SAM2 Mask 独立存在：不生成 Masked RGB；Turntable 只把 Mask 作为 COLMAP Feature 区域约束。**
 6. **Mesh / Splat 共享同一套 Camera Geometry。**
 7. **Raw Splat 永久保留，Cleanup 不覆盖 Raw。**
 8. **GUI Control 调 Core CLI，不复制重建算法。**

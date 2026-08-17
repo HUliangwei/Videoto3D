@@ -1,4 +1,4 @@
-import type { ArtifactCatalog, JobInfo, MeshSettings, RunDetail, RunSummary, SplatSettings } from './types'
+import type { ArtifactCatalog, CaptureMode, JobInfo, MeshSettings, RunDetail, RunSummary, SplatSettings } from './types'
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init)
@@ -16,8 +16,8 @@ export const api = {
   run: (id: string) => json<RunDetail>(`/api/runs/${encode(id)}`),
   artifacts: (id: string) => json<ArtifactCatalog>(`/api/runs/${encode(id)}/artifacts`),
   activeJob: (id: string) => json<JobInfo | null>(`/api/runs/${encode(id)}/job`),
-  uploadSource: (id: string, file: File) => json<{ run_id: string; source: string; job: JobInfo }>(
-    `/api/runs/${encode(id)}/source?filename=${encode(file.name)}`,
+  uploadSource: (id: string, file: File, captureMode: CaptureMode = 'orbit_camera') => json<{ run_id: string; source: string; job: JobInfo }>(
+    `/api/runs/${encode(id)}/source?filename=${encode(file.name)}&capture_mode=${encode(captureMode)}`,
     { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file },
   ),
   mask: (id: string, box: [number, number, number, number]) => json<JobInfo>(`/api/runs/${encode(id)}/mask`, {

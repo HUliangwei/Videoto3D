@@ -1,4 +1,4 @@
-"""FastAPI application for the Videoto3D V1.2.0 local control Studio."""
+"""FastAPI application for the Videoto3D V1.3.0 local control Studio."""
 
 import json
 import mimetypes
@@ -11,11 +11,13 @@ from fastapi.staticfiles import StaticFiles
 from gui.control.server.artifacts import (
     build_artifact_catalog,
     colmap_model_as_ply,
+    colmap_camera_centers_as_ply,
     resolve_artifact_file,
     resolve_colmap_model,
     resolve_sequence_item,
 )
 from gui.control.server.jobs import JobConflictError, JobManager, JobNotFoundError
+from pipeline.capture_mode import normalize_capture_mode
 from gui.control.server.service import (
     get_run_detail,
     list_runs,
@@ -109,13 +111,13 @@ def create_app(project_root=None, static_dir=None, shutdown_event=None, job_mana
     static_dir = Path(static_dir).resolve() if static_dir else None
     jobs = job_manager or JobManager(project_root)
 
-    app = FastAPI(title="Videoto3D Studio", version="1.2.0")
+    app = FastAPI(title="Videoto3D Studio", version="1.3.0")
     app.state.project_root = project_root
     app.state.jobs = jobs
 
     @app.get("/api/health")
     def health():
-        return {"status": "ready", "project_root": str(project_root), "version": "1.2.0"}
+        return {"status": "ready", "project_root": str(project_root), "version": "1.3.0"}
 
     @app.get("/api/runs")
     def runs():
@@ -134,8 +136,9 @@ def create_app(project_root=None, static_dir=None, shutdown_event=None, job_mana
         return {"status": "stopping"}
 
     @app.post("/api/runs/{run_id}/source")
-    async def upload_source(run_id: str, filename: str, request: Request):
+    async def upload_source(run_id: str, filename: str, request: Request, capture_mode: str = "orbit_camera"):
         try:
+            capture_mode = normalize_capture_mode(capture_mode)
             path = prepare_uploaded_source(project_root, run_id, filename)
             with path.open("wb") as output:
                 async for chunk in request.stream():
@@ -145,7 +148,7 @@ def create_app(project_root=None, static_dir=None, shutdown_event=None, job_mana
                 raise ValueError("Uploaded source is empty")
             job = jobs.start_core(
                 run_id, "extract",
-                ["run", "extract", "--run", run_id, "--input", str(path)],
+                ["run", "extract", "--run", run_id, "--input", str(path), "--capture-mode", capture_mode],
             )
             return {"run_id": run_id, "source": str(path), "job": job}
         except JobConflictError as exc:
@@ -268,9 +271,12 @@ def create_app(project_root=None, static_dir=None, shutdown_event=None, job_mana
     @app.get("/api/runs/{run_id}/artifacts/file/{key}")
     def artifact_file(run_id: str, key: str):
         try:
-            if key in ("sparse", "object-sparse"):
+            if key in ("sparse", "object-sparse", "camera-trajectory"):
                 model = resolve_colmap_model(project_root, run_id, key)
-                payload = colmap_model_as_ply(model)
+                payload = (
+                    colmap_camera_centers_as_ply(model)
+                    if key == "camera-trajectory" else colmap_model_as_ply(model)
+                )
                 return Response(
                     content=payload,
                     media_type="application/octet-stream",

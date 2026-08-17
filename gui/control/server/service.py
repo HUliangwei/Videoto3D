@@ -132,6 +132,7 @@ def get_run_detail(project_root, run_id):
         assets["splat"] = "/api/runs/{}/assets/splat".format(run_id)
     return {
         "run_id": manifest.get("run_id", run_id),
+        "capture_mode": manifest.get("capture_mode", "orbit_camera"),
         "root": str(run_root),
         "created_at": manifest.get("created_at"),
         "updated_at": manifest.get("updated_at"),

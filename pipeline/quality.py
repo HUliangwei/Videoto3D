@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from pipeline.run_workspace import load_run_manifest
+from pipeline.capture_mode import DEFAULT_CAPTURE_MODE, normalize_capture_mode
 from pipeline.splat_cleanup import read_ply_element_counts, read_ply_vertex_count
 
 
@@ -22,6 +23,8 @@ def generate_quality_report(run_root):
     run_root = Path(run_root); manifest = load_run_manifest(run_root); run_id = manifest.get("run_id", run_root.name)
     shared = manifest.get("shared", {}); mesh = manifest.get("routes", {}).get("mesh", {}); splat = manifest.get("routes", {}).get("splat", {})
     sparse = shared.get("sparse", {}); frames = int(shared.get("extract", {}).get("frame_count") or sparse.get("frame_count") or 0)
+    capture_mode = normalize_capture_mode(manifest.get("capture_mode", DEFAULT_CAPTURE_MODE))
+    sparse_mask_guided = bool(sparse.get("mask_guided", capture_mode == "turntable"))
     registered = int(sparse.get("registered_images") or 0)
     registration_rate = (registered / frames) if frames else 0.0
 
@@ -48,6 +51,8 @@ def generate_quality_report(run_root):
     report = {
         "run_id": run_id,
         "shared": {
+            "capture_mode": capture_mode,
+            "sparse_mask_guided": sparse_mask_guided,
             "frames": frames,
             "masks": int(shared.get("mask", {}).get("mask_count") or 0),
             "registered_images": registered,
@@ -82,6 +87,8 @@ def generate_quality_report(run_root):
     lines = [
         "# Videoto3D Quality Report", "", "Run: `{}`".format(run_id), "",
         "## Shared", "",
+        "- Capture mode: {}".format(s["capture_mode"]),
+        "- SfM feature strategy: {}".format("SAM2 mask-guided" if s["sparse_mask_guided"] else "Full RGB"),
         "- Frames: {}".format(s["frames"]),
         "- SAM2 masks: {}".format(s["masks"]),
         "- COLMAP registered: {} / {} ({})".format(s["registered_images"], s["frames"], _pct(s["registration_rate"])),

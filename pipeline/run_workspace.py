@@ -7,6 +7,8 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
+from pipeline.capture_mode import DEFAULT_CAPTURE_MODE, normalize_capture_mode
+
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 RUN_DIRS = (
     "source", "frames", "masks", "segmentation", "colmap",
@@ -48,6 +50,7 @@ def _default_manifest(run_id):
         "schema_version": 4,
         "videoto3d_version": "0.11",
         "run_id": run_id,
+        "capture_mode": DEFAULT_CAPTURE_MODE,
         "created_at": now,
         "updated_at": now,
         "source": {},
@@ -203,6 +206,7 @@ def _convert_v3_to_v4(run_root, old):
     """
     run_root = Path(run_root)
     new = dict(old)
+    new["capture_mode"] = normalize_capture_mode(old.get("capture_mode", DEFAULT_CAPTURE_MODE))
     new["schema_version"] = 4
     new["videoto3d_version"] = "0.11"
     routes = new.setdefault("routes", {})
@@ -281,6 +285,9 @@ def load_run_manifest(run_root):
         return save_run_manifest(run_root, value)
 
     changed = False
+    capture_mode = normalize_capture_mode(value.get("capture_mode", DEFAULT_CAPTURE_MODE))
+    if value.get("capture_mode") != capture_mode:
+        value["capture_mode"] = capture_mode; changed = True
     if value.get("schema_version") != 4:
         value["schema_version"] = 4; changed = True
     if value.get("videoto3d_version") != "0.11":
@@ -311,6 +318,12 @@ def create_or_load_run(runs_dir, run_id):
     else:
         manifest = save_run_manifest(run_root, _default_manifest(run_id))
     return run_root, manifest
+
+
+def update_capture_mode(run_root, capture_mode):
+    manifest = load_run_manifest(run_root)
+    manifest["capture_mode"] = normalize_capture_mode(capture_mode)
+    return save_run_manifest(run_root, manifest)
 
 
 def update_run_source(run_root, original_input, local_source):

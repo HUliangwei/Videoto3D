@@ -1,4 +1,6 @@
-"""Canonical, data-driven CLI registry for Videoto3D V1.1.2."""
+"""Canonical, data-driven CLI registry for Videoto3D V1.3.0."""
+
+from pipeline.capture_mode import normalize_capture_mode
 
 COMMAND_SPECS = {
     "env.status": {
@@ -39,7 +41,7 @@ COMMAND_SPECS = {
     },
     "route.mesh": {
         "tokens": ("route", "mesh"),
-        "command": "python app.py route mesh --run <run_id> [--input <video>] [--undistort-max-image-size 2000] [--dense-resolution-level 0] [--dense-number-views 0] [--dense-max-threads 0] [--refine-resolution-level 1] [--output-name name.glb] [--output <path>]",
+        "command": "python app.py route mesh --run <run_id> [--input <video>] [--capture-mode orbit_camera|turntable] [--undistort-max-image-size 2000] [--dense-resolution-level 0] [--dense-number-views 0] [--dense-max-threads 0] [--refine-resolution-level 1] [--output-name name.glb] [--output <path>]",
         "description": "一键执行 Shared 阶段 + Mesh Route：extract → mask → sparse → OpenMVS → GLB；已完成阶段自动跳过。",
         "input": "已有 Run；新 Run 必须通过 --input 指定视频",
         "output": "workspace/runs/<run_id>/output/<run_id>.glb",
@@ -48,7 +50,7 @@ COMMAND_SPECS = {
     },
     "route.splat": {
         "tokens": ("route", "splat"),
-        "command": "python app.py route splat --run <run_id> [--input <video>] [--steps 30000] [--max-splats 2000000] [--max-resolution 1280] [--foreground-ratio 0.6] [--min-foreground-observations 2] [--cleanup-ratio 0.7] [--cleanup-min-views 3]",
+        "command": "python app.py route splat --run <run_id> [--input <video>] [--capture-mode orbit_camera|turntable] [--steps 30000] [--max-splats 2000000] [--max-resolution 1280] [--foreground-ratio 0.6] [--min-foreground-observations 2] [--cleanup-ratio 0.7] [--cleanup-min-views 3]",
         "description": "一键执行 Shared 阶段 + Splat Route：Brush raw PLY → SAM2/COLMAP 多视角 Cleanup → 最终主体 Gaussian Splat PLY；已完成训练可只重跑 Cleanup。",
         "input": "已有 Run；新 Run 必须通过 --input 指定视频",
         "output": "workspace/runs/<run_id>/output/<run_id>_splat.ply",
@@ -57,7 +59,7 @@ COMMAND_SPECS = {
     },
     "run.extract": {
         "tokens": ("run", "extract"),
-        "command": "python app.py run extract --run <run_id> --input <video>",
+        "command": "python app.py run extract --run <run_id> --input <video> [--capture-mode orbit_camera|turntable]",
         "description": "创建/更新一个 Run，并使用 FFmpeg 从输入视频抽取原始 RGB 帧。源视频会复制进该 Run 的 source/。",
         "input": "--input 指定的视频文件",
         "output": "workspace/runs/<run_id>/source + frames",
@@ -76,7 +78,7 @@ COMMAND_SPECS = {
     "run.sparse": {
         "tokens": ("run", "sparse"),
         "command": "python app.py run sparse --run <run_id>",
-        "description": "使用该 Run 的原始 RGB 图像执行 COLMAP SfM，估计稳定相机位姿与稀疏点云。",
+        "description": "执行 Shared COLMAP SfM：Orbit Camera 使用完整 RGB 特征；Turntable 使用 SAM2 Mask-guided 特征。",
         "input": "workspace/runs/<run_id>/frames",
         "output": "workspace/runs/<run_id>/colmap",
         "next": "python app.py view sparse --run <run_id>",
@@ -219,6 +221,7 @@ _VALUE_OPTIONS = {
     "--dense-max-threads": "dense_max_threads",
     "--refine-resolution-level": "refine_resolution_level",
     "--box": "box",
+    "--capture-mode": "capture_mode",
 }
 
 
@@ -309,6 +312,15 @@ def parse_cli_args(args):
             return _error("--box 必须满足 0<=x0<x1 且 0<=y0<y1。")
         options["box"] = box
 
+
+    if options.get("capture_mode") is not None:
+        if key not in ("run.extract", "route.mesh", "route.splat"):
+            return _error("--capture-mode 仅用于 run extract / route mesh / route splat。")
+        try:
+            options["capture_mode"] = normalize_capture_mode(options["capture_mode"])
+        except ValueError as exc:
+            return _error(str(exc))
+
     profile_keys = ("steps", "max_splats", "max_resolution")
     if any(options.get(n) is not None for n in profile_keys) and key not in ("run.splat", "route.splat"):
         return _error("--steps / --max-splats / --max-resolution 仅用于 Splat Route。")
@@ -384,7 +396,7 @@ def print_command_annotation(spec, options=None):
 
 
 def print_cli_help():
-    print("Videoto3D V1.1.2 规范命令：\n")
+    print("Videoto3D V1.3.0 规范命令：\n")
     for spec in COMMAND_SPECS.values():
         print("  {:<150} # {}".format(spec["command"], spec["description"]))
     print("\n完整说明请阅读项目根目录 README.md")

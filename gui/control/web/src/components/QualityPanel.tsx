@@ -18,6 +18,8 @@ export function QualityPanel({ report }: { report: any | null }) {
   return (
     <div className="quality-grid">
       <section className="panel"><div className="eyebrow">SHARED</div><h3>Capture & SfM</h3>
+        <Metric label="Capture Mode" value={shared.capture_mode === 'turntable' ? 'TURNTABLE' : 'ORBIT CAMERA'} />
+        <Metric label="Sparse Strategy" value={shared.sparse_mask_guided ? 'MASK-GUIDED' : 'FULL RGB'} />
         <Metric label="Frames" value={num(shared.frames)} />
         <Metric label="SAM2 Masks" value={num(shared.masks)} />
         <Metric label="COLMAP Registration" value={pct(shared.registration_rate)} />

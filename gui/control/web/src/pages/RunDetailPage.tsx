@@ -78,7 +78,7 @@ export function RunDetailPage({ id, initialJobId, onBack, onJob }: { id: string;
 
   return <main className="page detail-page">
     <button className="back" onClick={onBack}>← All Runs</button>
-    <header className="detail-head"><div><div className="eyebrow">VIDEOTO3D RUN</div><h1>{run.run_id}</h1><p>{String(run.source?.original_input ?? run.source?.local_file ?? '')}</p></div><div className="status-row"><StatusPill value={sharedReady ? 'SHARED READY' : maskReady ? 'SPARSE PENDING' : extractReady ? 'MASK PENDING' : 'EXTRACTING'} /><StatusPill value={meshReady ? 'MESH COMPLETE' : 'MESH PENDING'} /><StatusPill value={splatReady ? 'SPLAT COMPLETE' : 'SPLAT PENDING'} /></div></header>
+    <header className="detail-head"><div><div className="eyebrow">VIDEOTO3D RUN</div><h1>{run.run_id}</h1><p>{String(run.source?.original_input ?? run.source?.local_file ?? '')}</p><p><strong>Capture:</strong> {run.capture_mode === 'turntable' ? 'Turntable · mask-guided SfM' : 'Orbit Camera · full-RGB SfM'}</p></div><div className="status-row"><StatusPill value={sharedReady ? 'SHARED READY' : maskReady ? 'SPARSE PENDING' : extractReady ? 'MASK PENDING' : 'EXTRACTING'} /><StatusPill value={meshReady ? 'MESH COMPLETE' : 'MESH PENDING'} /><StatusPill value={splatReady ? 'SPLAT COMPLETE' : 'SPLAT PENDING'} /></div></header>
 
     {jobId && <JobPanel jobId={jobId} onTerminal={onTerminal} onUpdate={updateJob} />}
 

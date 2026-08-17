@@ -31,6 +31,9 @@ from pipeline.brush import (
 )
 from pipeline.splat_cleanup import cleanup_splat
 from pipeline.quality import generate_quality_report
+from pipeline.capture_mode import (
+    DEFAULT_CAPTURE_MODE, capture_mode_label, normalize_capture_mode, sparse_mask_path,
+)
 from pipeline.segmentation_runtime import resolve_segmentation_runtime
 from pipeline.env_manager import environment_status, repair_environment, environment_python
 from pipeline.segmentation import (
@@ -58,6 +61,7 @@ from pipeline.run_workspace import (
     route_stage_status,
     shared_stage_status,
     update_route_stage,
+    update_capture_mode,
     update_run_source,
     update_shared_stage,
     validate_run_id,
@@ -713,7 +717,17 @@ def invalidate_after_extract(run_root):
     invalidate_route_stages(run_root, "splat")
 
 def invalidate_after_mask(run_root):
-    _reset_dirs(run_root, ("mesh", "splat", "output"))
+    manifest = load_run_manifest(run_root)
+    capture_mode = normalize_capture_mode(manifest.get("capture_mode", DEFAULT_CAPTURE_MODE))
+    reset_names = ["mesh", "splat", "output"]
+    if capture_mode == "turntable":
+        # Turntable SfM extracts features through the SAM2 masks, therefore a
+        # mask change invalidates the Shared COLMAP model as well.
+        reset_names.append("colmap")
+        for log_path in (run_root / "logs" / "shared").glob("colmap_*.log"):
+            log_path.unlink(missing_ok=True)
+        invalidate_shared_stages(run_root, ("sparse",))
+    _reset_dirs(run_root, tuple(reset_names))
     _reset_dirs(run_root / "logs", ("mesh", "splat"))
     invalidate_route_stages(run_root, "mesh")
     invalidate_route_stages(run_root, "splat")
@@ -726,7 +740,9 @@ def invalidate_after_sparse(run_root):
 
 def run_extract(resolved, options):
     run_id = validate_run_id(options["run"])
+    capture_mode = normalize_capture_mode(options.get("capture_mode", DEFAULT_CAPTURE_MODE))
     run_root, _ = create_or_load_run(WORKSPACE / "runs", run_id)
+    update_capture_mode(run_root, capture_mode)
     local_video = copy_source_into_run(run_root, options["input"])
     update_run_source(run_root, options["input"], local_video)
     result = extract_frames(
@@ -739,8 +755,8 @@ def run_extract(resolved, options):
         run_root, "extract", "ready", frame_count=result["frame_count"], fps=result["fps"],
         source_file=_rel(run_root, local_video), frames_dir="frames", log=_rel(run_root, result["log"]),
     )
-    print("=" * 68); print("Videoto3D V0.11 Frame Extraction")
-    print("Run    :", run_id); print("Input  :", local_video); print("FPS    :", result["fps"])
+    print("=" * 68); print("Videoto3D V1.3 Frame Extraction")
+    print("Run    :", run_id); print("Capture:", capture_mode_label(capture_mode)); print("Input  :", local_video); print("FPS    :", result["fps"])
     print("Frames :", result["frame_count"]); print("Output :", result["output_dir"])
     print("Manifest:", run_root / "run.json"); print("=" * 68)
     print("[READY] Next: python app.py run mask --run {}".format(run_id))
@@ -752,7 +768,7 @@ def run_mask(runtime, options):
     logs_dir = run_root / "logs" / "shared"
     frame_count = len(list(frames_dir.glob("frame_*.jpg")))
     if frame_count == 0: raise RuntimeError("Run {} has no extracted frames. Run extract first.".format(run_id))
-    print("=" * 68); print("Videoto3D V0.11 Object Isolation"); print("Run    :", run_id)
+    print("=" * 68); print("Videoto3D V1.3 Object Isolation"); print("Run    :", run_id)
     print("Frames :", frame_count); print("Model  :", runtime["checkpoint"]); print("GPU    :", runtime["detail"]); print("=" * 68)
     box = options.get("box")
     if box is None:
@@ -769,7 +785,7 @@ def run_mask(runtime, options):
         run_root, "mask", "ready", frame_count=report["frame_count"], mask_count=report["mask_count"],
         box_xyxy=report["box_xyxy"], report="segmentation/report.json", masks_dir="masks",
     )
-    print("=" * 68); print("Videoto3D V0.11 Mask Result"); print("Run    :", run_id)
+    print("=" * 68); print("Videoto3D V1.3 Mask Result"); print("Run    :", run_id)
     print("Frames :", report["frame_count"]); print("Masks  :", report["mask_count"]); print("Box    :", report["box_xyxy"])
     print("Output :", masks_dir); print("=" * 68); print("[READY] Next: python app.py view masks --run {}".format(run_id))
     return 0
@@ -783,15 +799,19 @@ def run_view_masks(runtime, options):
         output_path=run_root / "segmentation" / "mask_qa.jpg",
         log_path=run_root / "logs" / "shared" / "mask_qa_viewer.log", cwd=ROOT,
     )
-    print("=" * 68); print("Videoto3D V0.11 Mask QA"); print("Run    :", run_id)
+    print("=" * 68); print("Videoto3D V1.3 Mask QA"); print("Run    :", run_id)
     print("Frames :", validation["frame_count"]); print("Masks  :", validation["mask_count"]); print("QA     :", result["output"])
     print("=" * 68); print("[READY] Next: python app.py run sparse --run {}".format(run_id)); return 0
 
 def run_sparse(resolved, options):
-    run_id = validate_run_id(options["run"]); run_root, _ = _require_run(run_id)
+    run_id = validate_run_id(options["run"]); run_root, manifest = _require_run(run_id)
+    capture_mode = normalize_capture_mode(manifest.get("capture_mode", DEFAULT_CAPTURE_MODE))
+    mask_path = sparse_mask_path(run_root, capture_mode)
+    if mask_path is not None:
+        validate_masks(run_root / "frames", mask_path)
     result = run_sparse_reconstruction(
         colmap_path=resolved["colmap"], frames_dir=run_root / "frames", colmap_dir=run_root / "colmap",
-        logs_dir=run_root / "logs" / "shared", overwrite=True, mask_path=None,
+        logs_dir=run_root / "logs" / "shared", overwrite=True, mask_path=mask_path,
     )
     invalidate_after_sparse(run_root); stats = result["stats"]
     update_shared_stage(
@@ -799,9 +819,11 @@ def run_sparse(resolved, options):
         registered_images=stats.get("registered_images"), points3D=stats.get("points3D"),
         mean_track_length=stats.get("mean_track_length"), mean_reprojection_error=stats.get("mean_reprojection_error"),
         model=_rel(run_root, result["model"]), database=_rel(run_root, result["database"]),
+        capture_mode=capture_mode, mask_guided=(mask_path is not None),
     )
-    print("=" * 68); print("Videoto3D V0.11 COLMAP Sparse Reconstruction"); print("Run         :", run_id)
-    print("Frames      :", result["frame_count"]); print("Mask mode   : DISABLED (original RGB SfM)")
+    print("=" * 68); print("Videoto3D V1.3 COLMAP Sparse Reconstruction"); print("Run         :", run_id)
+    print("Capture     :", capture_mode_label(capture_mode))
+    print("Frames      :", result["frame_count"]); print("Mask mode   :", "SAM2 GUIDED" if mask_path is not None else "DISABLED (full RGB)")
     print("Database    :", result["database"]); print("Model       :", result["model"])
     print("Registered  :", stats.get("registered_images", "-"), "/", result["frame_count"]); print("3D Points   :", stats.get("points3D", "-"))
     print("Track Length:", stats.get("mean_track_length", "-")); print("Reproj Error:", stats.get("mean_reprojection_error", "-")); print("=" * 68)
@@ -813,7 +835,7 @@ def run_view_sparse(resolved, options):
         colmap_path=resolved["colmap"], model_path=colmap_dir / "sparse" / "0",
         database_path=colmap_dir / "database.db", image_path=run_root / "frames", cwd=colmap_dir,
     )
-    print("=" * 68); print("Videoto3D V0.11 Shared COLMAP Sparse Viewer"); print("Run   :", run_id); print("PID   :", pid); print("=" * 68)
+    print("=" * 68); print("Videoto3D V1.3 Shared COLMAP Sparse Viewer"); print("Run   :", run_id); print("PID   :", pid); print("=" * 68)
     return 0
 
 def run_mesh(resolved, options):
@@ -842,7 +864,7 @@ def run_mesh(resolved, options):
         textures=[_rel(run_root, item) for item in result["textures"]],
         profile=profile, recipe=_rel(run_root, result["recipe"]) if result.get("recipe") else None,
     )
-    print("=" * 68); print("Videoto3D V0.11 Mesh Route"); print("Run         :", run_id); print("OBJ         :", result["obj"])
+    print("=" * 68); print("Videoto3D V1.3 Mesh Route"); print("Run         :", run_id); print("OBJ         :", result["obj"])
     print("Textures    :", len(result["textures"])); print("Mesh profile:", profile); print("=" * 68); print("[READY] Next: python app.py run glb --run {}".format(run_id)); return 0
 
 def _validate_glb_name(name):
@@ -871,7 +893,7 @@ def run_glb(resolved, options):
         exported_to = str(external_output)
     update_route_stage(run_root, "mesh", "glb", "ready", path=_rel(run_root, output_glb), size_bytes=result["size_bytes"], exported_to=exported_to)
     _refresh_quality(run_root)
-    print("=" * 68); print("Videoto3D V0.11 Blender GLB Export"); print("Run   :", run_id); print("Output:", output_glb)
+    print("=" * 68); print("Videoto3D V1.3 Blender GLB Export"); print("Run   :", run_id); print("Output:", output_glb)
     if exported_to: print("Export:", exported_to)
     print("Size  : {:.2f} MB".format(result["size_bytes"] / (1024 * 1024))); print("=" * 68)
     print("[READY] View: python app.py view glb --run {}".format(run_id)); return 0
@@ -938,7 +960,7 @@ def run_splat_training(resolved, options):
         dataset=_rel(run_root, result["dataset_root"]), recipe=_rel(run_root, result["recipe"]), log=_rel(run_root, result["log"]),
         raw_path=_rel(run_root, result["raw_ply"]), raw_size_bytes=result["raw_size_bytes"],
     )
-    print("=" * 68); print("Videoto3D V0.11 Brush Raw Splat Training"); print("Run        :", run_id)
+    print("=" * 68); print("Videoto3D V1.3 Brush Raw Splat Training"); print("Run        :", run_id)
     print("Object pts : {} / {}".format(report.get("kept_points", "-"), report.get("source_points", "-")))
     print("FG ratio   :", profile["foreground_ratio"]); print("Min FG obs :", profile["min_foreground_observations"])
     print("Steps      :", profile["steps"]); print("Max splats :", profile["max_splats"]); print("Resolution :", profile["max_resolution"])
@@ -971,7 +993,7 @@ def run_splat_cleanup(options):
         run_root, "splat", "ply", "ready", path=_rel(run_root, output_ply), size_bytes=output_ply.stat().st_size,
     )
     _refresh_quality(run_root)
-    print("=" * 68); print("Videoto3D V0.11 Splat Cleanup"); print("Run        :", run_id)
+    print("=" * 68); print("Videoto3D V1.3 Splat Cleanup"); print("Run        :", run_id)
     print("Raw splats :", report["raw_splats"]); print("Clean      :", report["clean_splats"])
     print("Removed    : {} ({:.1f}%)".format(report["removed_splats"], report["removal_ratio"] * 100.0))
     print("Mask vote  : ratio >= {} / valid views >= {}".format(profile["cleanup_ratio"], profile["cleanup_min_views"]))
@@ -1047,7 +1069,7 @@ def run_runs_show(options):
     def st(section, stage): return section.get(stage, {}).get("status", "pending")
     shared = manifest.get("shared", {}); mesh = manifest.get("routes", {}).get("mesh", {}); splat = manifest.get("routes", {}).get("splat", {})
     print("=" * 68); print("Videoto3D Run:", run_id); print("Root     :", run_root); print("Created  :", manifest.get("created_at", "-")); print("Updated  :", manifest.get("updated_at", "-"))
-    source = manifest.get("source", {}); print("Source   :", source.get("local_file", "-")); print("Original :", source.get("original_input", "-"))
+    source = manifest.get("source", {}); print("Source   :", source.get("local_file", "-")); print("Original :", source.get("original_input", "-")); print("Capture  :", capture_mode_label(manifest.get("capture_mode", DEFAULT_CAPTURE_MODE)))
     print(); print("Shared")
     for stage in ("extract", "mask", "sparse"):
         entry = shared.get(stage, {}); suffix = ""
@@ -1088,12 +1110,26 @@ def _route_toolset(names):
 
 def _route_prepare_shared(options):
     run_id = validate_run_id(options["run"]); run_root = resolve_run_root(run_id); input_path = options.get("input")
+    requested_capture_mode = (
+        normalize_capture_mode(options.get("capture_mode"))
+        if options.get("capture_mode") is not None else None
+    )
     if not (run_root / "run.json").exists() and not input_path:
         raise RuntimeError("New Run {} requires --input <video>.".format(run_id))
     if input_path:
         print("[ROUTE][RUN ] shared.extract (input supplied)")
-        run_extract(_route_toolset(("ffmpeg",)), {"run": run_id, "input": input_path})
+        extract_options = {"run": run_id, "input": input_path}
+        if requested_capture_mode is not None:
+            extract_options["capture_mode"] = requested_capture_mode
+        run_extract(_route_toolset(("ffmpeg",)), extract_options)
     run_root, manifest = _require_run(run_id)
+    current_capture_mode = normalize_capture_mode(manifest.get("capture_mode", DEFAULT_CAPTURE_MODE))
+    if requested_capture_mode is not None and requested_capture_mode != current_capture_mode:
+        raise RuntimeError(
+            "Run {} is capture_mode={!r}, requested {!r}. Re-run with --input so Shared data can be rebuilt safely."
+            .format(run_id, current_capture_mode, requested_capture_mode)
+        )
+    print("[ROUTE][INFO] capture_mode={}".format(current_capture_mode))
     if _route_shared_ready(manifest, "extract"): print("[ROUTE][SKIP] shared.extract READY")
     else: raise RuntimeError("Shared extract is not ready; provide --input <video>.")
     manifest = load_run_manifest(run_root)

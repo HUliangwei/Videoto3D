@@ -85,7 +85,7 @@ class ArtifactCatalogTests(unittest.TestCase):
     def test_catalog_exposes_every_pipeline_artifact_and_partial_masks(self):
         items = self.by_key(build_artifact_catalog(self.root, 'demo_001'))
         self.assertEqual(set(items), {
-            'frames','masks','sparse','dense','raw-mesh','refined-mesh','textures','glb',
+            'frames','masks','sparse','camera-trajectory','dense','raw-mesh','refined-mesh','textures','glb',
             'object-sparse','raw-splat','clean-splat',
         })
         self.assertEqual(items['frames']['state'], 'ready')
@@ -93,6 +93,7 @@ class ArtifactCatalogTests(unittest.TestCase):
         self.assertEqual(items['masks']['state'], 'partial')
         self.assertEqual(items['masks']['count'], 2)
         self.assertEqual(items['sparse']['metrics']['points'], 2)
+        self.assertEqual(items['camera-trajectory']['state'], 'missing')
         self.assertEqual(items['dense']['metrics']['vertices'], 900)
         self.assertEqual(items['raw-mesh']['metrics']['faces'], 220)
         self.assertEqual(items['textures']['count'], 1)

@@ -1,0 +1,4 @@
+# Videoto3D developer/test-only dependencies.
+# Keep these separate from env/core, env/seg and env/gui runtime recipes.
+pytest>=7,<9
+httpx>=0.27,<1

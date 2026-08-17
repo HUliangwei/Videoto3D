@@ -4239,3 +4239,114 @@ Brush 根据所有已知 Camera View 优化 Gaussian 的位置、形状、
 ```text
 “理解一条完整 Multi-View Reconstruction Pipeline”
 ```
+
+---
+
+# 68. V1.3 Turntable Capture Mode：固定相机为什么也能做刚体 3D
+
+V1.2 的默认采集模型是：
+
+```text
+Object static
+Camera moves
+```
+
+V1.3 增加：
+
+```text
+Camera static
+Rigid object rotates
+```
+
+对刚体而言，图像约束来自相机与物体之间的**相对位姿**。设物体到相机的齐次变换为：
+
+\[
+T_{co}(t)=
+\begin{bmatrix}
+R_o(t) & t_o(t)\\
+0 & 1
+\end{bmatrix}
+\]
+
+如果把物体坐标系定义成静止世界坐标系，同一组相对观测可以写成等效相机运动：
+
+\[
+T_{oc}(t)=T_{co}(t)^{-1}
+\]
+
+因此“物体旋转”可以被 SfM 解释成“相机反向绕物体运动”。
+
+## 68.1 为什么完整 RGB 在 Turntable 下会冲突
+
+背景固定时，背景点满足近似零光流：
+
+\[
+\Delta u_{bg}\approx0,\qquad \Delta v_{bg}\approx0
+\]
+
+而物体表面特征随旋转产生显著对应变化。如果 Feature Extraction 同时覆盖背景与主体，静止背景往往提供数量更多、稳定性更高的匹配，从而把问题推向“相机没有移动”的退化解释。
+
+V1.3 使用逐帧 SAM2 二值 Mask：
+
+\[
+M_t(u,v)\in\{0,1\}
+\]
+
+Feature 只允许出现在：
+
+\[
+\mathcal F_t=\{f_i\mid M_t(u_i,v_i)=1\}
+\]
+
+这样 Sequential Matching、Essential/Fundamental Geometry、Triangulation 与 Bundle Adjustment 主要由刚体主体自身的跨帧特征支撑。
+
+## 68.2 不是把背景像素改黑
+
+V1.3 保留原始 RGB：
+
+```text
+RGB image = unchanged
+SAM2 mask = separate file
+COLMAP ImageReader.mask_path = masks/
+```
+
+Mask 控制“哪里可以提 Feature”，而不是创造一套新的黑背景照片。这样避免人为边界进入图像内容，同时继续保留真实主体像素。
+
+## 68.3 Camera Center
+
+COLMAP 的外参采用 world-to-camera：
+
+\[
+x_c=Rx_w+t
+\]
+
+相机中心满足：
+
+\[
+0=RC+t
+\]
+
+因此：
+
+\[
+\boxed{C=-R^Tt}
+\]
+
+Artifact Inspector 的 Camera Trajectory 读取每个注册图像的 \(q,t\)，把 quaternion 转成 \(R\)，再计算 \(C\) 并输出为浏览器可读 PLY 点云。
+
+对于正常 Orbit Camera，它表示真实相机中心轨迹；对于 Turntable，它表示由刚体旋转恢复出的**等效虚拟相机轨迹**。
+
+## 68.4 人体边界
+
+如果人物只是整体旋转且姿态近似不变，可以近似看成刚体。但以下变化会破坏单一静态几何假设：
+
+```text
+手臂独立运动
+走路
+头部相对身体转动
+明显表情变化
+头发 / 衣物大幅变形
+```
+
+这些属于 Dynamic / 4D Reconstruction，而不是 V1.3 Turntable 的目标问题。
+

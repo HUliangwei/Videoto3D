@@ -19,7 +19,7 @@ _FILE_KEYS = {
     "dense", "raw-mesh", "refined-mesh", "glb", "raw-splat", "clean-splat",
 }
 _SEQUENCE_KEYS = {"frames", "masks", "textures"}
-_COLMAP_KEYS = {"sparse", "object-sparse"}
+_COLMAP_KEYS = {"sparse", "object-sparse", "camera-trajectory"}
 
 
 def _validate_run_id(run_id):
@@ -134,6 +134,85 @@ def _colmap_count(model_dir):
     return int(struct.unpack("<Q", raw)[0])
 
 
+
+def _quaternion_to_rotation(qw, qx, qy, qz):
+    return (
+        (1.0 - 2.0 * (qy * qy + qz * qz), 2.0 * (qx * qy - qw * qz), 2.0 * (qx * qz + qw * qy)),
+        (2.0 * (qx * qy + qw * qz), 1.0 - 2.0 * (qx * qx + qz * qz), 2.0 * (qy * qz - qw * qx)),
+        (2.0 * (qx * qz - qw * qy), 2.0 * (qy * qz + qw * qx), 1.0 - 2.0 * (qx * qx + qy * qy)),
+    )
+
+
+def read_colmap_camera_centers(model_dir):
+    """Read registered COLMAP images.bin and return world-space camera centers.
+
+    COLMAP stores world-to-camera pose x_c = R x_w + t, so the camera center
+    in world coordinates is C = -R^T t.
+    """
+    path = Path(model_dir) / "images.bin"
+    if not path.is_file():
+        raise FileNotFoundError("COLMAP images.bin not found: {}".format(path))
+    result = []
+    fixed = struct.Struct("<i7di")
+    with path.open("rb") as handle:
+        raw = handle.read(8)
+        if len(raw) != 8:
+            raise RuntimeError("Invalid COLMAP images.bin header: {}".format(path))
+        count = struct.unpack("<Q", raw)[0]
+        for _ in range(count):
+            data = handle.read(fixed.size)
+            if len(data) != fixed.size:
+                raise RuntimeError("Truncated COLMAP images.bin: {}".format(path))
+            image_id, qw, qx, qy, qz, tx, ty, tz, camera_id = fixed.unpack(data)
+            name_bytes = bytearray()
+            while True:
+                byte = handle.read(1)
+                if not byte:
+                    raise RuntimeError("Truncated COLMAP image name: {}".format(path))
+                if byte == b"\x00":
+                    break
+                name_bytes.extend(byte)
+            point_count_raw = handle.read(8)
+            if len(point_count_raw) != 8:
+                raise RuntimeError("Truncated COLMAP points2D count: {}".format(path))
+            point_count = struct.unpack("<Q", point_count_raw)[0]
+            handle.seek(int(point_count) * 24, 1)
+            rotation = _quaternion_to_rotation(qw, qx, qy, qz)
+            tvec = (tx, ty, tz)
+            center = tuple(
+                -sum(rotation[row][column] * tvec[row] for row in range(3))
+                for column in range(3)
+            )
+            result.append({
+                "image_id": int(image_id),
+                "camera_id": int(camera_id),
+                "name": name_bytes.decode("utf-8", errors="replace"),
+                "center": center,
+            })
+    return result
+
+
+def colmap_camera_centers_as_ply(model_dir):
+    centers = read_colmap_camera_centers(model_dir)
+    header = (
+        "ply\n"
+        "format binary_little_endian 1.0\n"
+        "comment Videoto3D COLMAP camera centers\n"
+        "element vertex {}\n"
+        "property float x\nproperty float y\nproperty float z\n"
+        "property uchar red\nproperty uchar green\nproperty uchar blue\n"
+        "end_header\n"
+    ).format(len(centers)).encode("ascii")
+    vertex = struct.Struct("<fffBBB")
+    body = bytearray(vertex.size * len(centers))
+    offset = 0
+    for item in centers:
+        x, y, z = item["center"]
+        vertex.pack_into(body, offset, float(x), float(y), float(z), 240, 164, 108)
+        offset += vertex.size
+    return header + bytes(body)
+
+
 def colmap_model_as_ply(model_dir):
     """Convert COLMAP points3D.bin to a compact browser-readable RGB PLY."""
     model_dir = Path(model_dir)
@@ -205,6 +284,7 @@ def _artifact_paths(run_root, manifest, run_id):
     final_splat = splat.get("ply", {}) if isinstance(splat.get("ply", {}), dict) else {}
     return {
         "sparse": run_root / "colmap" / "sparse" / "0",
+        "camera-trajectory": run_root / "colmap" / "sparse" / "0",
         "dense": openmvs / "scene_dense.ply",
         "raw-mesh": openmvs / "scene_mesh.ply",
         "refined-mesh": openmvs / "scene_refined.ply",
@@ -281,6 +361,19 @@ def build_artifact_catalog(project_root, run_id):
             asset_url="/api/runs/{}/artifacts/file/sparse".format(run_id),
         ),
     ]
+
+    shared.append(
+        _item(
+            "camera-trajectory", "Camera Trajectory", "Shared · Sparse",
+            "ready" if (paths["camera-trajectory"] / "images.bin").is_file() else (
+                "missing" if _stage_status(manifest, "shared", "sparse") == "ready" else "pending"
+            ),
+            "pointcloud",
+            "COLMAP registered camera centers. Orbit mode reflects physical camera motion; Turntable mode shows the equivalent virtual camera motion recovered from rigid-object features.",
+            {"cameras": len(read_colmap_camera_centers(paths["camera-trajectory"])) if (paths["camera-trajectory"] / "images.bin").is_file() else 0},
+            asset_url="/api/runs/{}/artifacts/file/camera-trajectory".format(run_id),
+        )
+    )
 
     mesh = [
         _item(
