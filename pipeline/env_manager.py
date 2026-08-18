@@ -19,6 +19,12 @@ ENVIRONMENT_NAMES = ("core", "seg", "gui")
 MARKER_NAME = ".videoto3d-env.json"
 STATE_SCHEMA = 1
 
+CORE_RUNTIME_PROBE = (
+    "import cv2,numpy; from PIL import Image; "
+    "assert hasattr(cv2, 'SIFT_create'), 'OpenCV SIFT unavailable'; "
+    "print('OpenCV', cv2.__version__, 'SIFT=READY', numpy.__version__, Image.__version__)"
+)
+
 SEG_TORCH_PACKAGES = (
     "torch==2.5.1",
     "torchvision==0.20.1",
@@ -220,9 +226,31 @@ def _post_install(root, name, python_path, runner):
         )
 
 
+def core_runtime_status(root, runner=subprocess.run):
+    """Probe installed core CV runtime without changing the environment."""
+    root = Path(root)
+    python_path = environment_python(root, "core")
+    if not python_path.exists():
+        return {
+            "ready": False,
+            "detail": "core Python missing: {}".format(python_path),
+        }
+    result = runner(
+        [str(python_path), "-c", CORE_RUNTIME_PROBE],
+        cwd=str(root),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    detail = (getattr(result, "stdout", "") or "").strip()
+    return {
+        "ready": int(getattr(result, "returncode", 1)) == 0,
+        "detail": detail or "core runtime probe returned no output",
+    }
+
 def _validate_environment(root, name, python_path, runner):
     probes = {
-        "core": "import numpy; from PIL import Image; print(numpy.__version__, Image.__version__)",
+        "core": CORE_RUNTIME_PROBE,
         "gui": "import fastapi,uvicorn; print(fastapi.__version__,uvicorn.__version__)",
         "seg": (
             "import cv2,torch,sam2; "

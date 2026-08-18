@@ -31,13 +31,14 @@ from pipeline.brush import (
     launch_brush_viewer,
 )
 from pipeline.splat_cleanup import cleanup_splat
+from pipeline.run_lock import run_resource_lock
 from pipeline.quality import generate_quality_report
 from pipeline.capture_mode import (
     DEFAULT_CAPTURE_MODE, capture_mode_label, normalize_capture_mode, sparse_mask_path,
 )
 from pipeline.workflows import get_capture_workflow, run_sparse_for_capture
 from pipeline.segmentation_runtime import resolve_segmentation_runtime
-from pipeline.env_manager import environment_status, repair_environment, environment_python
+from pipeline.env_manager import core_runtime_status, environment_status, repair_environment, environment_python
 from pipeline.segmentation import (
     copy_frames_for_masked_run,
     run_segmentation,
@@ -1049,8 +1050,11 @@ def run_splat_cleanup(options):
 
 
 def run_splat(resolved, options):
-    run_splat_training(resolved, options)
-    return run_splat_cleanup(options)
+    run_id = validate_run_id(options["run"])
+    run_root, _ = _require_run(run_id)
+    with run_resource_lock(run_root, "splat"):
+        run_splat_training(resolved, options)
+        return run_splat_cleanup(options)
 
 
 def _resolve_splat_asset(options):
@@ -1337,9 +1341,16 @@ def print_legacy_command_error(parsed):
 def run_env_status():
     print("ENVIRONMENT         STATUS     PATH")
     print("-" * 72)
+    core_item = None
     for name in ("core", "seg", "gui"):
         item = environment_status(ROOT, name)
+        if name == "core":
+            core_item = item
         print("{:<19} {:<10} {}".format(name, item["status"], item["prefix"]))
+    if core_item and core_item["status"] == "READY":
+        health = core_runtime_status(ROOT)
+        label = "READY" if health["ready"] else "ERROR"
+        print("[{}] Core CV runtime: {}".format(label, health["detail"]))
     return 0
 
 
@@ -1377,6 +1388,10 @@ def main():
 
     if key == "doctor":
         ok, resolved = check_environment()
+        core_health = core_runtime_status(ROOT)
+        core_label = "READY" if core_health["ready"] else "ERROR"
+        print("[{}] Core CV runtime: {}".format(core_label, core_health["detail"]))
+        ok = ok and core_health["ready"]
         runtime = None
     elif key in ("run.mask", "view.masks"):
         ok, runtime = check_segmentation_environment()
