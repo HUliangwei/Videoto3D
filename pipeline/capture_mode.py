@@ -1,8 +1,9 @@
-"""Capture-mode helpers for Videoto3D V1.3.2.2.
+"""Capture-mode helpers for Videoto3D V1.3.3.1.
 
 Orbit camera keeps the existing full-RGB incremental SfM behavior. Turntable
-keeps the camera fixed and uses SAM2 mask-guided features plus deterministic
-uniform-360 known virtual camera poses before COLMAP point triangulation.
+keeps the camera fixed and uses SAM2 mask-guided features plus free-span,
+single-axis known virtual camera poses before the existing COLMAP point
+triangulation backend.
 """
 
 from pathlib import Path
@@ -48,4 +49,4 @@ def capture_mode_label(value):
 
 
 def sparse_strategy_label(value):
-    return "Adaptive 360° poses + SAM2 features" if is_turntable(value) else "Full RGB incremental SfM"
+    return "Turntable research workflow" if is_turntable(value) else "Full RGB incremental SfM"

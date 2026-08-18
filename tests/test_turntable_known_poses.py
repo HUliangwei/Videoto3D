@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from pipeline.turntable import (
+from pipeline.workflows.turntable.legacy_v13.reconstruction import (
     build_uniform_pose_records,
     camera_center_from_qt,
     choose_turntable_candidate,
@@ -94,6 +94,6 @@ def test_mask_bbox_median_estimates_projected_axis(tmp_path):
 
 
 def test_turntable_module_uses_known_pose_triangulator_not_mapper():
-    source=Path("pipeline/turntable.py").read_text(encoding="utf-8")
+    source=Path("pipeline/workflows/turntable/legacy_v13/reconstruction.py").read_text(encoding="utf-8")
     assert '"point_triangulator"' in source
     assert '"mapper"' not in source

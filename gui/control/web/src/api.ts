@@ -23,6 +23,7 @@ export const api = {
   mask: (id: string, box: [number, number, number, number]) => json<JobInfo>(`/api/runs/${encode(id)}/mask`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ box }),
   }),
+  sparse: (id: string) => json<JobInfo>(`/api/runs/${encode(id)}/sparse`, { method: 'POST' }),
   routeMesh: (id: string, settings: MeshSettings) => json<JobInfo>(`/api/runs/${encode(id)}/route/mesh`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings),
   }),

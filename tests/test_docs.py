@@ -31,8 +31,8 @@ class TestProjectDocs(unittest.TestCase):
     def test_v08_docs_describe_multi_run_and_blender_glb_preview(self):
         readme = (self.root / "README.md").read_text(encoding="utf-8")
         self.assertIn("workspace/runs/<run_id>/", readme)
-        self.assertIn("python app.py runs list", readme)
-        self.assertIn("python app.py view glb (--run <run_id> | --path <glb>)", readme)
+        self.assertIn("python Videoto3D.py runs list", readme)
+        self.assertIn("python Videoto3D.py view glb (--run <run_id> | --path <glb>)", readme)
         guide = self.root / "docs" / "troubleshooting" / "blender-glb-viewing.md"
         self.assertTrue(guide.exists())
         if guide.exists():
@@ -43,8 +43,8 @@ class TestProjectDocs(unittest.TestCase):
     def test_v09_docs_describe_brush_splat_and_detached_viewers(self):
         root = Path(__file__).resolve().parents[1]
         readme = (root / "README.md").read_text(encoding="utf-8")
-        self.assertIn("python app.py run splat --run <run_id>", readme)
-        self.assertIn("python app.py view splat", readme)
+        self.assertIn("python Videoto3D.py run splat --run <run_id>", readme)
+        self.assertIn("python Videoto3D.py view splat", readme)
         self.assertIn("SPLAT", readme)
         bug = root / "docs" / "bugs" / "BUG-0002-viewer-process-does-not-release-terminal.md"
         self.assertTrue(bug.exists())
@@ -59,9 +59,9 @@ class TestV10Docs(unittest.TestCase):
     def test_v10_docs_describe_flat_dual_routes_and_object_sparse(self):
         readme = Path("README.md").read_text(encoding="utf-8")
         adr = Path("docs/architecture/ADR-0003-dual-route-flat-run-layout.md").read_text(encoding="utf-8")
-        self.assertIn("python app.py route mesh --run <run_id>", readme)
-        self.assertIn("python app.py route splat --run <run_id>", readme)
-        self.assertIn("python app.py view splat-init --run <run_id>", readme)
+        self.assertIn("python Videoto3D.py route mesh --run <run_id>", readme)
+        self.assertIn("python Videoto3D.py route splat --run <run_id>", readme)
+        self.assertIn("python Videoto3D.py view splat-init --run <run_id>", readme)
         self.assertIn("object_sparse_report.json", readme)
         self.assertIn("Shared + Mesh/Splat Route", adr)
 
@@ -69,7 +69,7 @@ class TestV11Docs(unittest.TestCase):
     def test_v11_docs_describe_cleanup_quality_and_raw_final_split(self):
         readme = Path("README.md").read_text(encoding="utf-8")
         adr = Path("docs/architecture/ADR-0004-post-brush-splat-cleanup.md").read_text(encoding="utf-8")
-        self.assertIn("python app.py quality --run <run_id>", readme)
+        self.assertIn("python Videoto3D.py quality --run <run_id>", readme)
         self.assertIn("--cleanup-ratio 0.7", readme)
         self.assertIn("splat/raw/<run_id>_raw.ply", readme)
         self.assertIn("quality/report.json", readme)
@@ -81,7 +81,7 @@ class TestV100Docs(unittest.TestCase):
         readme = Path("README.md").read_text(encoding="utf-8")
         gui = Path("gui/README.md").read_text(encoding="utf-8")
         adr = Path("docs/architecture/ADR-0005-gui-control-viewer-boundary.md").read_text(encoding="utf-8")
-        self.assertIn("python app.py gui", readme)
+        self.assertIn("python Videoto3D.py gui", readme)
         self.assertIn("gui/control", readme)
         self.assertIn("gui/viewer", readme)
         self.assertIn("must **not** know about Videoto3D", gui)

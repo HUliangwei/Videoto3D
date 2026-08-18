@@ -6,7 +6,7 @@ class EnvCliTests(unittest.TestCase):
     def test_env_status_is_canonical(self):
         parsed = parse_cli_args(["env", "status"])
         self.assertEqual(parsed["key"], "env.status")
-        self.assertEqual(command_spec("env.status")["command"], "python app.py env status")
+        self.assertEqual(command_spec("env.status")["command"], "python Videoto3D.py env status")
 
     def test_env_repair_accepts_only_known_environment(self):
         parsed = parse_cli_args(["env", "repair", "gui"])

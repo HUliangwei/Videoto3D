@@ -36,7 +36,7 @@ def bootstrap_core(root, argv, executable=None, execv=os.execv):
     os.environ["PYTHONNOUSERSITE"] = "1"
     execv(
         str(target),
-        [str(target), str(root / "app.py"), *argv],
+        [str(target), str(root / "Videoto3D.py"), *argv],
     )
     return True
 

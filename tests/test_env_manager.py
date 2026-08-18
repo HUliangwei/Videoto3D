@@ -55,7 +55,7 @@ class EnvManagerTests(unittest.TestCase):
         self.assertIn("Conda", message)
         self.assertIn("Miniconda", message)
         self.assertIn("conda --version", message)
-        self.assertIn("python app.py gui", message)
+        self.assertIn("python Videoto3D.py gui", message)
 
     def test_ensure_environment_creates_prefix_and_marker(self):
         with tempfile.TemporaryDirectory() as td:

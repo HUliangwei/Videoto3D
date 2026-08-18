@@ -70,6 +70,9 @@ export function AssetViewer({ type, src, className, background = '#07090d', auto
     controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY
     controls.keys = ['', '', '']
     let autoRotateEnabled = autoRotate
+    let autoFitMode = true
+    const markManualView = () => { autoFitMode = false }
+    controls.addEventListener('start', markManualView)
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x223344, 2.1))
     const key = new THREE.DirectionalLight(0xffffff, 2.8); key.position.set(3, 5, 4); scene.add(key)
@@ -99,8 +102,14 @@ export function AssetViewer({ type, src, className, background = '#07090d', auto
     const fitBox = (box: THREE.Box3) => {
       if (box.isEmpty()) return
       objectBox = box.clone(); center = box.getCenter(new THREE.Vector3())
-      const size = box.getSize(new THREE.Vector3()); const maxDim = Math.max(size.x, size.y, size.z, 0.001)
-      distance = (maxDim / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2))) * 1.55
+      const size = box.getSize(new THREE.Vector3())
+      const radius = Math.max(size.length() * 0.5, 0.001)
+      const verticalFov = THREE.MathUtils.degToRad(camera.fov)
+      const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * Math.max(camera.aspect, 0.05))
+      const limitingFov = Math.max(Math.min(verticalFov, horizontalFov), THREE.MathUtils.degToRad(5))
+      // Fit the bounding sphere, not only the longest box edge. This keeps all
+      // corners visible even for diagonal/thin geometry and narrow viewports.
+      distance = (radius / Math.sin(limitingFov / 2)) * 1.12
       camera.near = Math.max(distance / 1000, 0.001); camera.far = Math.max(distance * 100, 100); camera.updateProjectionMatrix()
       applyView('Iso')
     }
@@ -113,9 +122,11 @@ export function AssetViewer({ type, src, className, background = '#07090d', auto
     }
 
     actionsRef.current = {
-      fit: () => fitBox(objectBox), reset: () => applyView('Iso'), view: applyView,
-      rotate: (enabled) => { autoRotateEnabled = enabled },
-      roll: rollCamera,
+      fit: () => { autoFitMode = true; fitBox(objectBox) },
+      reset: () => { autoFitMode = true; fitBox(objectBox) },
+      view: (name) => { autoFitMode = false; applyView(name) },
+      rotate: (enabled) => { autoRotateEnabled = enabled; if (enabled) autoFitMode = false },
+      roll: (degrees) => { autoFitMode = false; rollCamera(degrees) },
     }
 
     const focusFromDoubleClick = (event: MouseEvent) => {
@@ -125,13 +136,15 @@ export function AssetViewer({ type, src, className, background = '#07090d', auto
       raycaster.params.Points.threshold = Math.max(distance / 250, 0.001)
       const hits = raycaster.intersectObjects(scene.children, true)
       const hit = hits.find((item) => item.object !== spark)
-      if (hit) { controls.target.copy(hit.point); controls.update() }
+      if (hit) { autoFitMode = false; controls.target.copy(hit.point); controls.update() }
     }
     renderer.domElement.addEventListener('dblclick', focusFromDoubleClick)
+    const isolateWheel = (event: WheelEvent) => { event.preventDefault(); event.stopPropagation() }
+    renderer.domElement.addEventListener('wheel', isolateWheel, { passive: false })
 
     if (type === 'glb') {
       new GLTFLoader().load(src, (gltf) => {
-        loadedObject = gltf.scene; scene.add(gltf.scene); fitBox(new THREE.Box3().setFromObject(gltf.scene)); setStatus('ready')
+        loadedObject = gltf.scene; scene.add(gltf.scene); autoFitMode = true; fitBox(new THREE.Box3().setFromObject(gltf.scene)); setStatus('ready')
       }, undefined, (reason) => { console.error(reason); setError('GLB 加载失败'); setStatus('error') })
     } else if (type === 'pointcloud' || type === 'mesh-ply') {
       new PLYLoader().load(src, (geometry) => {
@@ -159,19 +172,23 @@ export function AssetViewer({ type, src, className, background = '#07090d', auto
           })
           loadedObject = new THREE.Mesh(geometry, material)
         }
-        scene.add(loadedObject); fitBox(box); setStatus('ready')
+        scene.add(loadedObject); autoFitMode = true; fitBox(box); setStatus('ready')
       }, undefined, (reason) => { console.error(reason); setError(`${typeLabel(type)} 加载失败`); setStatus('error') })
     } else {
       try {
         spark = new SparkRenderer({ renderer }); scene.add(spark)
         splat = new SplatMesh({ url: src, onLoad: (mesh) => {
-          try { fitBox(mesh.getBoundingBox(true)) } catch { camera.position.set(2.4, 1.4, 3.2) }
+          try { autoFitMode = true; fitBox(mesh.getBoundingBox(true)) } catch { camera.position.set(2.4, 1.4, 3.2) }
           setStatus('ready')
         } }); scene.add(splat)
       } catch (reason) { console.error(reason); setError('Gaussian Splat 加载失败'); setStatus('error') }
     }
 
-    const resize = () => { const w = Math.max(host.clientWidth, 1); const h = Math.max(host.clientHeight, 1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); controls.handleResize() }
+    const resize = () => {
+      const w = Math.max(host.clientWidth, 1); const h = Math.max(host.clientHeight, 1)
+      renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); controls.handleResize()
+      if (autoFitMode && !objectBox.isEmpty()) fitBox(objectBox)
+    }
     const observer = new ResizeObserver(resize); observer.observe(host); resize()
     let frame = 0
     const animate = () => {
@@ -185,7 +202,7 @@ export function AssetViewer({ type, src, className, background = '#07090d', auto
     }; animate()
 
     return () => {
-      cancelAnimationFrame(frame); observer.disconnect(); renderer.domElement.removeEventListener('dblclick', focusFromDoubleClick); controls.dispose()
+      cancelAnimationFrame(frame); observer.disconnect(); renderer.domElement.removeEventListener('dblclick', focusFromDoubleClick); renderer.domElement.removeEventListener('wheel', isolateWheel); controls.removeEventListener('start', markManualView); controls.dispose()
       if (loadedObject) disposeObject(loadedObject)
       ;(splat as unknown as { dispose?: () => void } | null)?.dispose?.(); (spark as unknown as { dispose?: () => void } | null)?.dispose?.()
       renderer.dispose(); renderer.domElement.remove()
@@ -194,7 +211,7 @@ export function AssetViewer({ type, src, className, background = '#07090d', auto
 
   const view = (name: ViewName) => actionsRef.current.view(name)
   const toggleRotate = () => { const next = !rotating; setRotating(next); actionsRef.current.rotate(next) }
-  return <div ref={hostRef} className={className} style={{ position:'relative', width:'100%', height:'100%', overflow:'hidden' }}>
+  return <div ref={hostRef} className={className} style={{ position:'relative', width:'100%', height:'100%', overflow:'hidden', overscrollBehavior:'contain' }}>
     {status === 'loading' && <div style={overlayStyle}>Loading {typeLabel(type)}…</div>}
     {status === 'error' && <div style={overlayStyle}>{error}</div>}
     {showToolbar && <>
@@ -204,7 +221,7 @@ export function AssetViewer({ type, src, className, background = '#07090d', auto
         <button style={buttonStyle} onClick={() => actionsRef.current.roll(-90)}>Roll Left</button><button style={buttonStyle} onClick={() => actionsRef.current.roll(180)}>Flip</button><button style={buttonStyle} onClick={() => actionsRef.current.roll(90)}>Roll Right</button>
         <button style={buttonStyle} onClick={toggleRotate}>Auto Rotate {rotating ? 'On' : 'Off'}</button><button style={buttonStyle} onClick={enterFullscreen}>Fullscreen</button>
       </div>
-      <div style={hintStyle}>LMB Free Rotate/Roll · RMB Pan · Wheel Zoom · Double Click Focus</div>
+      <div style={hintStyle}>LMB Free Rotate/Roll · RMB Pan · Wheel Zoom · Fit restores Auto Fit</div>
     </>}
   </div>
 }

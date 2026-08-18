@@ -24,7 +24,7 @@ class CoreBootstrapTests(unittest.TestCase):
                 )
             self.assertTrue(handled)
             self.assertEqual(Path(calls[0][0]), target)
-            self.assertEqual(Path(calls[0][1][1]), root / "app.py")
+            self.assertEqual(Path(calls[0][1][1]), root / "Videoto3D.py")
             self.assertEqual(calls[0][1][2:], ["doctor"])
             self.assertEqual(__import__("os").environ.get("PYTHONNOUSERSITE"), "1")
 

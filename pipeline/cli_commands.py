@@ -5,7 +5,7 @@ from pipeline.capture_mode import normalize_capture_mode
 COMMAND_SPECS = {
     "env.status": {
         "tokens": ("env", "status"),
-        "command": "python app.py env status",
+        "command": "python Videoto3D.py env status",
         "description": "查看项目内 core / seg / gui Conda 环境状态。",
         "input": "env/ + config/envs/*.yml",
         "output": "READY / MISSING / STALE / BROKEN 状态表",
@@ -14,7 +14,7 @@ COMMAND_SPECS = {
     },
     "env.repair": {
         "tokens": ("env", "repair"),
-        "command": "python app.py env repair <core|seg|gui>",
+        "command": "python Videoto3D.py env repair <core|seg|gui>",
         "description": "只重建指定的项目内 Conda 环境，不触碰 runtime、workspace 或其他环境。",
         "input": "config/envs/<environment>.yml",
         "output": "env/<environment>",
@@ -23,7 +23,7 @@ COMMAND_SPECS = {
     },
     "gui": {
         "tokens": ("gui",),
-        "command": "python app.py gui",
+        "command": "python Videoto3D.py gui",
         "description": "启动 Videoto3D V1.1.2 本地控制 Studio：New Run、浏览器 SAM2 ROI、Mesh/Splat Route、参数/路径查看、可见进度与 3D 结果查看。",
         "input": "workspace/runs + 项目内 core/seg/gui 环境 + 本机工具链",
         "output": "http://127.0.0.1:8765 本地控制网页；所有重建仍调用现有 core CLI",
@@ -32,97 +32,97 @@ COMMAND_SPECS = {
     },
     "doctor": {
         "tokens": ("doctor",),
-        "command": "python app.py doctor",
+        "command": "python Videoto3D.py doctor",
         "description": "检查 Videoto3D 全部外部工具与本机运行环境是否可用。",
         "input": "config/tools.json、runtime/ 以及本机已安装工具",
         "output": "环境检查结果；不会执行重建任务",
-        "next": "python app.py route mesh --run teddy_001 --input <video>",
+        "next": "python Videoto3D.py route mesh --run teddy_001 --input <video>",
         "tools": ("colmap", "brush", "blender", "ffmpeg", "openmvs"),
     },
     "route.mesh": {
         "tokens": ("route", "mesh"),
-        "command": "python app.py route mesh --run <run_id> [--input <video>] [--capture-mode orbit_camera|turntable] [--undistort-max-image-size 2000] [--dense-resolution-level 0] [--dense-number-views 0] [--dense-max-threads 0] [--refine-resolution-level 1] [--output-name name.glb] [--output <path>]",
+        "command": "python Videoto3D.py route mesh --run <run_id> [--input <video>] [--capture-mode orbit_camera|turntable] [--undistort-max-image-size 2000] [--dense-resolution-level 0] [--dense-number-views 0] [--dense-max-threads 0] [--refine-resolution-level 1] [--output-name name.glb] [--output <path>]",
         "description": "一键执行 Shared 阶段 + Mesh Route：extract → mask → sparse → OpenMVS → GLB；已完成阶段自动跳过。",
         "input": "已有 Run；新 Run 必须通过 --input 指定视频",
         "output": "workspace/runs/<run_id>/output/<run_id>.glb",
-        "next": "python app.py view glb --run <run_id>",
+        "next": "python Videoto3D.py view glb --run <run_id>",
         "tools": (),
     },
     "route.splat": {
         "tokens": ("route", "splat"),
-        "command": "python app.py route splat --run <run_id> [--input <video>] [--capture-mode orbit_camera|turntable] [--steps 30000] [--max-splats 2000000] [--max-resolution 1280] [--foreground-ratio 0.6] [--min-foreground-observations 2] [--cleanup-ratio 0.7] [--cleanup-min-views 3]",
+        "command": "python Videoto3D.py route splat --run <run_id> [--input <video>] [--capture-mode orbit_camera|turntable] [--steps 30000] [--max-splats 2000000] [--max-resolution 1280] [--foreground-ratio 0.6] [--min-foreground-observations 2] [--cleanup-ratio 0.7] [--cleanup-min-views 3]",
         "description": "一键执行 Shared 阶段 + Splat Route：Brush raw PLY → SAM2/COLMAP 多视角 Cleanup → 最终主体 Gaussian Splat PLY；已完成训练可只重跑 Cleanup。",
         "input": "已有 Run；新 Run 必须通过 --input 指定视频",
         "output": "workspace/runs/<run_id>/output/<run_id>_splat.ply",
-        "next": "python app.py view splat --run <run_id>",
+        "next": "python Videoto3D.py view splat --run <run_id>",
         "tools": (),
     },
     "run.extract": {
         "tokens": ("run", "extract"),
-        "command": "python app.py run extract --run <run_id> --input <video> [--capture-mode orbit_camera|turntable]",
+        "command": "python Videoto3D.py run extract --run <run_id> --input <video> [--capture-mode orbit_camera|turntable]",
         "description": "创建/更新一个 Run，并使用 FFmpeg 从输入视频抽取原始 RGB 帧。源视频会复制进该 Run 的 source/。",
         "input": "--input 指定的视频文件",
         "output": "workspace/runs/<run_id>/source + frames",
-        "next": "python app.py run mask --run <run_id>",
+        "next": "python Videoto3D.py run mask --run <run_id>",
         "tools": ("ffmpeg",),
     },
     "run.mask": {
         "tokens": ("run", "mask"),
-        "command": "python app.py run mask --run <run_id> [--box x0,y0,x1,y1]",
+        "command": "python Videoto3D.py run mask --run <run_id> [--box x0,y0,x1,y1]",
         "description": "使用首帧目标框执行 SAM2 Mask 传播；CLI 未提供 --box 时打开交互框选，GUI 直接传入浏览器 ROI。",
         "input": "workspace/runs/<run_id>/frames",
         "output": "workspace/runs/<run_id>/masks + segmentation/report.json",
-        "next": "python app.py view masks --run <run_id>",
+        "next": "python Videoto3D.py view masks --run <run_id>",
         "tools": (),
     },
     "run.sparse": {
         "tokens": ("run", "sparse"),
-        "command": "python app.py run sparse --run <run_id>",
+        "command": "python Videoto3D.py run sparse --run <run_id>",
         "description": "执行 Shared COLMAP SfM：Orbit Camera 使用完整 RGB 特征；Turntable 使用 SAM2 Mask-guided 特征。",
         "input": "workspace/runs/<run_id>/frames",
         "output": "workspace/runs/<run_id>/colmap",
-        "next": "python app.py view sparse --run <run_id>",
+        "next": "python Videoto3D.py view sparse --run <run_id>",
         "tools": ("colmap",),
     },
     "run.mesh": {
         "tokens": ("run", "mesh"),
-        "command": "python app.py run mesh --run <run_id> [--undistort-max-image-size 2000] [--dense-resolution-level 0] [--dense-number-views 0] [--dense-max-threads 0] [--refine-resolution-level 1]",
+        "command": "python Videoto3D.py run mesh --run <run_id> [--undistort-max-image-size 2000] [--dense-resolution-level 0] [--dense-number-views 0] [--dense-max-threads 0] [--refine-resolution-level 1]",
         "description": "使用共享 COLMAP 相机位姿 + SAM2 Mask 执行 Mesh Route 的 OpenMVS Dense / Reconstruct / Refine / Texture。",
         "input": "共享 colmap + frames + masks",
         "output": "workspace/runs/<run_id>/mesh/openmvs/object.obj 及纹理",
-        "next": "python app.py run glb --run <run_id>",
+        "next": "python Videoto3D.py run glb --run <run_id>",
         "tools": ("colmap", "openmvs"),
     },
     "run.glb": {
         "tokens": ("run", "glb"),
-        "command": "python app.py run glb --run <run_id> [--output-name name.glb] [--output <path>]",
+        "command": "python Videoto3D.py run glb --run <run_id> [--output-name name.glb] [--output <path>]",
         "description": "使用 Blender 将 Mesh Route OBJ/纹理导出为自包含 GLB。",
         "input": "workspace/runs/<run_id>/mesh/openmvs/object.obj",
         "output": "workspace/runs/<run_id>/output/<name>.glb；可选 --output 导出副本",
-        "next": "python app.py view glb --run <run_id>",
+        "next": "python Videoto3D.py view glb --run <run_id>",
         "tools": ("blender",),
     },
     "run.splat": {
         "tokens": ("run", "splat"),
-        "command": "python app.py run splat --run <run_id> [--steps 30000] [--max-splats 2000000] [--max-resolution 1280] [--foreground-ratio 0.6] [--min-foreground-observations 2] [--cleanup-ratio 0.7] [--cleanup-min-views 3]",
+        "command": "python Videoto3D.py run splat --run <run_id> [--steps 30000] [--max-splats 2000000] [--max-resolution 1280] [--foreground-ratio 0.6] [--min-foreground-observations 2] [--cleanup-ratio 0.7] [--cleanup-min-views 3]",
         "description": "训练 Brush raw Gaussian Splat，然后复用共享 COLMAP cameras + SAM2 masks 对最终 Gaussian 做多视角主体 Cleanup。",
         "input": "共享 frames + masks + colmap/sparse/0",
         "output": "workspace/runs/<run_id>/splat + output/<run_id>_splat.ply",
-        "next": "python app.py view splat --run <run_id>",
+        "next": "python Videoto3D.py view splat --run <run_id>",
         "tools": ("brush",),
     },
     "view.masks": {
         "tokens": ("view", "masks"),
-        "command": "python app.py view masks --run <run_id>",
+        "command": "python Videoto3D.py view masks --run <run_id>",
         "description": "检查指定 Run 的 SAM2 分割质量，展示原图 + Mask 叠加图。",
         "input": "workspace/runs/<run_id>/frames + masks",
         "output": "workspace/runs/<run_id>/segmentation/mask_qa.jpg",
-        "next": "python app.py run sparse --run <run_id>",
+        "next": "python Videoto3D.py run sparse --run <run_id>",
         "tools": (),
     },
     "view.sparse": {
         "tokens": ("view", "sparse"),
-        "command": "python app.py view sparse --run <run_id>",
+        "command": "python Videoto3D.py view sparse --run <run_id>",
         "description": "在 COLMAP GUI 中查看共享的原始 RGB 稀疏重建。",
         "input": "workspace/runs/<run_id>/colmap/sparse/0",
         "output": "启动独立 COLMAP GUI",
@@ -131,25 +131,25 @@ COMMAND_SPECS = {
     },
     "view.splat-init": {
         "tokens": ("view", "splat-init"),
-        "command": "python app.py view splat-init --run <run_id>",
+        "command": "python Videoto3D.py view splat-init --run <run_id>",
         "description": "在 COLMAP GUI 中查看 Splat Route 的 object-only sparse 初始化：保留全部相机，只过滤背景 points3D。",
         "input": "workspace/runs/<run_id>/splat/dataset/sparse/0",
         "output": "启动独立 COLMAP GUI",
-        "next": "python app.py run splat --run <run_id>",
+        "next": "python Videoto3D.py run splat --run <run_id>",
         "tools": ("colmap",),
     },
     "view.mesh": {
         "tokens": ("view", "mesh"),
-        "command": "python app.py view mesh (--run <run_id> | --path <obj>)",
+        "command": "python Videoto3D.py view mesh (--run <run_id> | --path <obj>)",
         "description": "在 Blender 中查看 Mesh Route OBJ，或通过 --path 查看任意 OBJ。",
         "input": "Run 的 mesh/openmvs/object.obj 或 --path",
         "output": "启动独立 Blender Viewer",
-        "next": "python app.py run glb --run <run_id>",
+        "next": "python Videoto3D.py run glb --run <run_id>",
         "tools": ("blender",),
     },
     "view.glb": {
         "tokens": ("view", "glb"),
-        "command": "python app.py view glb (--run <run_id> | --path <glb>)",
+        "command": "python Videoto3D.py view glb (--run <run_id> | --path <glb>)",
         "description": "在 Blender Material Preview 查看最终 GLB，或通过 --path 查看任意 GLB。",
         "input": "Mesh Route manifest 记录的 GLB 或 --path",
         "output": "启动独立 Blender Viewer",
@@ -158,7 +158,7 @@ COMMAND_SPECS = {
     },
     "view.splat": {
         "tokens": ("view", "splat"),
-        "command": "python app.py view splat (--run <run_id> | --path <ply>)",
+        "command": "python Videoto3D.py view splat (--run <run_id> | --path <ply>)",
         "description": "使用 Brush Viewer 查看 Gaussian Splat PLY，或通过 --path 查看任意 Splat PLY。",
         "input": "Splat Route manifest 记录的 PLY 或 --path",
         "output": "启动独立 Brush Viewer",
@@ -167,7 +167,7 @@ COMMAND_SPECS = {
     },
     "quality": {
         "tokens": ("quality",),
-        "command": "python app.py quality --run <run_id>",
+        "command": "python Videoto3D.py quality --run <run_id>",
         "description": "生成并打印指定 Run 的统一质量报告，汇总 Shared、Mesh Route 与 Splat Route 指标。",
         "input": "workspace/runs/<run_id>/run.json + 已有中间/最终产物",
         "output": "workspace/runs/<run_id>/quality/report.json + report.md",
@@ -176,16 +176,16 @@ COMMAND_SPECS = {
     },
     "runs.list": {
         "tokens": ("runs", "list"),
-        "command": "python app.py runs list",
+        "command": "python Videoto3D.py runs list",
         "description": "列出所有 Run，并区分 Shared、Mesh Route、Splat Route 进度。",
         "input": "workspace/runs/*/run.json",
         "output": "终端双路线状态表",
-        "next": "python app.py runs show <run_id>",
+        "next": "python Videoto3D.py runs show <run_id>",
         "tools": (),
     },
     "runs.show": {
         "tokens": ("runs", "show"),
-        "command": "python app.py runs show <run_id>",
+        "command": "python Videoto3D.py runs show <run_id>",
         "description": "展开单个 Run 的 Shared / Mesh Route / Splat Route 子阶段状态和关键指标。",
         "input": "workspace/runs/<run_id>/run.json + route cache files",
         "output": "终端 Run 详情",
@@ -195,15 +195,15 @@ COMMAND_SPECS = {
 }
 
 LEGACY_REPLACEMENTS = {
-    "extract": "python app.py run extract --run <run_id> --input <video>",
-    "mask": "python app.py run mask --run <run_id>",
-    "sparse": "python app.py run sparse --run <run_id>",
-    "mesh": "python app.py run mesh --run <run_id>",
-    "glb": "python app.py run glb --run <run_id>",
-    "view": "python app.py view sparse --run <run_id>",
-    "view-masks": "python app.py view masks --run <run_id>",
-    "view-mesh": "python app.py view mesh --run <run_id>",
-    "view-glb": "python app.py view glb --run <run_id>",
+    "extract": "python Videoto3D.py run extract --run <run_id> --input <video>",
+    "mask": "python Videoto3D.py run mask --run <run_id>",
+    "sparse": "python Videoto3D.py run sparse --run <run_id>",
+    "mesh": "python Videoto3D.py run mesh --run <run_id>",
+    "glb": "python Videoto3D.py run glb --run <run_id>",
+    "view": "python Videoto3D.py view sparse --run <run_id>",
+    "view-masks": "python Videoto3D.py view masks --run <run_id>",
+    "view-mesh": "python Videoto3D.py view mesh --run <run_id>",
+    "view-glb": "python Videoto3D.py view glb --run <run_id>",
 }
 
 _TOKEN_TO_KEY = {tuple(spec["tokens"]): key for key, spec in COMMAND_SPECS.items()}
@@ -255,12 +255,12 @@ def parse_cli_args(args):
     if lowered[:2] == ["runs", "list"]:
         return {"kind": "command", "key": "runs.list", "options": {}} if len(args) == 2 else _error("runs list 不接受额外参数。")
     if lowered[:2] == ["runs", "show"]:
-        return {"kind": "command", "key": "runs.show", "options": {"run": args[2]}} if len(args) == 3 else _error("用法：python app.py runs show <run_id>")
+        return {"kind": "command", "key": "runs.show", "options": {"run": args[2]}} if len(args) == 3 else _error("用法：python Videoto3D.py runs show <run_id>")
     if lowered[:2] == ["env", "status"]:
         return {"kind": "command", "key": "env.status", "options": {}} if len(args) == 2 else _error("env status 不接受额外参数。")
     if lowered[:2] == ["env", "repair"]:
         if len(args) != 3:
-            return _error("用法：python app.py env repair <core|seg|gui>")
+            return _error("用法：python Videoto3D.py env repair <core|seg|gui>")
         environment = lowered[2]
         if environment not in ("core", "seg", "gui"):
             return _error("env repair 仅支持 core / seg / gui。")

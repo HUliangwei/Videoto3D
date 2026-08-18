@@ -35,6 +35,7 @@ from pipeline.quality import generate_quality_report
 from pipeline.capture_mode import (
     DEFAULT_CAPTURE_MODE, capture_mode_label, normalize_capture_mode, sparse_mask_path,
 )
+from pipeline.workflows import get_capture_workflow, run_sparse_for_capture
 from pipeline.segmentation_runtime import resolve_segmentation_runtime
 from pipeline.env_manager import environment_status, repair_environment, environment_python
 from pipeline.segmentation import (
@@ -614,7 +615,7 @@ def check_environment():
             "Run the SAME command "
             "after fixing dependencies:"
         )
-        print("python app.py")
+        print("python Videoto3D.py")
         return False, resolved
 
     print("Environment READY")
@@ -687,7 +688,7 @@ def _require_run(run_id):
     run_root = resolve_run_root(run_id)
     if not (run_root / "run.json").exists():
         raise FileNotFoundError(
-            "Run {!r} does not exist. Create it with: python app.py run extract --run {} --input <video>"
+            "Run {!r} does not exist. Create it with: python Videoto3D.py run extract --run {} --input <video>"
             .format(run_id, run_id)
         )
     return run_root, load_run_manifest(run_root)
@@ -756,11 +757,11 @@ def run_extract(resolved, options):
         run_root, "extract", "ready", frame_count=result["frame_count"], fps=result["fps"],
         source_file=_rel(run_root, local_video), frames_dir="frames", log=_rel(run_root, result["log"]),
     )
-    print("=" * 68); print("Videoto3D V1.3 Frame Extraction")
+    print("=" * 68); print("Videoto3D V1.4 Frame Extraction")
     print("Run    :", run_id); print("Capture:", capture_mode_label(capture_mode)); print("Input  :", local_video); print("FPS    :", result["fps"])
     print("Frames :", result["frame_count"]); print("Output :", result["output_dir"])
     print("Manifest:", run_root / "run.json"); print("=" * 68)
-    print("[READY] Next: python app.py run mask --run {}".format(run_id))
+    print("[READY] Next: python Videoto3D.py run mask --run {}".format(run_id))
     return 0
 
 def run_mask(runtime, options):
@@ -769,7 +770,7 @@ def run_mask(runtime, options):
     logs_dir = run_root / "logs" / "shared"
     frame_count = len(list(frames_dir.glob("frame_*.jpg")))
     if frame_count == 0: raise RuntimeError("Run {} has no extracted frames. Run extract first.".format(run_id))
-    print("=" * 68); print("Videoto3D V1.3 Object Isolation"); print("Run    :", run_id)
+    print("=" * 68); print("Videoto3D V1.4 Object Isolation"); print("Run    :", run_id)
     print("Frames :", frame_count); print("Model  :", runtime["checkpoint"]); print("GPU    :", runtime["detail"]); print("=" * 68)
     box = options.get("box")
     if box is None:
@@ -786,9 +787,9 @@ def run_mask(runtime, options):
         run_root, "mask", "ready", frame_count=report["frame_count"], mask_count=report["mask_count"],
         box_xyxy=report["box_xyxy"], report="segmentation/report.json", masks_dir="masks",
     )
-    print("=" * 68); print("Videoto3D V1.3 Mask Result"); print("Run    :", run_id)
+    print("=" * 68); print("Videoto3D V1.4 Mask Result"); print("Run    :", run_id)
     print("Frames :", report["frame_count"]); print("Masks  :", report["mask_count"]); print("Box    :", report["box_xyxy"])
-    print("Output :", masks_dir); print("=" * 68); print("[READY] Next: python app.py view masks --run {}".format(run_id))
+    print("Output :", masks_dir); print("=" * 68); print("[READY] Next: python Videoto3D.py view masks --run {}".format(run_id))
     return 0
 
 def run_view_masks(runtime, options):
@@ -800,41 +801,30 @@ def run_view_masks(runtime, options):
         output_path=run_root / "segmentation" / "mask_qa.jpg",
         log_path=run_root / "logs" / "shared" / "mask_qa_viewer.log", cwd=ROOT,
     )
-    print("=" * 68); print("Videoto3D V1.3 Mask QA"); print("Run    :", run_id)
+    print("=" * 68); print("Videoto3D V1.4 Mask QA"); print("Run    :", run_id)
     print("Frames :", validation["frame_count"]); print("Masks  :", validation["mask_count"]); print("QA     :", result["output"])
-    print("=" * 68); print("[READY] Next: python app.py run sparse --run {}".format(run_id)); return 0
+    print("=" * 68); print("[READY] Next: python Videoto3D.py run sparse --run {}".format(run_id)); return 0
 
 def run_sparse(resolved, options):
-    run_id = validate_run_id(options["run"]); run_root, manifest = _require_run(run_id)
+    run_id = validate_run_id(options["run"])
+    run_root, manifest = _require_run(run_id)
     capture_mode = normalize_capture_mode(manifest.get("capture_mode", DEFAULT_CAPTURE_MODE))
+    workflow = get_capture_workflow(capture_mode)
+    outcome = run_sparse_for_capture(
+        capture_mode,
+        colmap_path=resolved["colmap"],
+        frames_dir=run_root / "frames",
+        masks_dir=run_root / "masks",
+        colmap_dir=run_root / "colmap",
+        logs_dir=run_root / "logs" / "shared",
+        overwrite=True,
+    )
+    result = outcome["result"]
+    turntable = outcome.get("details", {})
+    pose_strategy = outcome["pose_strategy"]
 
-    if capture_mode == "turntable":
-        mask_path = run_root / "masks"
-        validate_masks(run_root / "frames", mask_path)
-        result = run_turntable_reconstruction(
-            colmap_path=resolved["colmap"],
-            frames_dir=run_root / "frames",
-            masks_dir=mask_path,
-            colmap_dir=run_root / "colmap",
-            logs_dir=run_root / "logs" / "shared",
-            overwrite=True,
-        )
-        turntable = result.get("turntable", {})
-        pose_strategy = turntable.get("pose_strategy", "adaptive_360_epipolar")
-    else:
-        mask_path = None
-        result = run_sparse_reconstruction(
-            colmap_path=resolved["colmap"],
-            frames_dir=run_root / "frames",
-            colmap_dir=run_root / "colmap",
-            logs_dir=run_root / "logs" / "shared",
-            overwrite=True,
-            mask_path=None,
-        )
-        turntable = {}
-        pose_strategy = "incremental_sfm"
-
-    invalidate_after_sparse(run_root); stats = result["stats"]
+    invalidate_after_sparse(run_root)
+    stats = result["stats"]
     stage_fields = {
         "frame_count": result["frame_count"],
         "registered_images": stats.get("registered_images"),
@@ -844,7 +834,9 @@ def run_sparse(resolved, options):
         "model": _rel(run_root, result["model"]),
         "database": _rel(run_root, result["database"]),
         "capture_mode": capture_mode,
-        "mask_guided": (capture_mode == "turntable"),
+        "workflow": workflow.id,
+        "workflow_maturity": workflow.maturity,
+        "mask_guided": bool(outcome.get("mask_guided")),
         "pose_strategy": pose_strategy,
     }
     if turntable:
@@ -861,21 +853,28 @@ def run_sparse(resolved, options):
         })
     update_shared_stage(run_root, "sparse", "ready", **stage_fields)
 
-    print("=" * 68); print("Videoto3D V1.3.2 COLMAP Sparse Reconstruction"); print("Run         :", run_id)
-    print("Capture     :", capture_mode_label(capture_mode))
+    print("=" * 68)
+    print("Videoto3D V1.4 Sparse Reconstruction")
+    print("Run         :", run_id)
+    print("Capture     :", workflow.label)
+    print("Workflow    :", "{} ({})".format(workflow.id, workflow.maturity.upper()))
     print("Frames      :", result["frame_count"])
     print("Pose model  :", pose_strategy)
-    print("Mask mode   :", "SAM2 GUIDED" if capture_mode == "turntable" else "DISABLED (full RGB)")
+    print("Mask mode   :", "SAM2 GUIDED" if outcome.get("mask_guided") else "DISABLED (full RGB)")
     if turntable:
         print("Direction   :", turntable.get("selected_direction", "-"))
         print("Axis (px)   :", turntable.get("axis_px", "-"))
         print("Angle pairs :", "{:.1%}".format(float(turntable.get("angle_valid_pair_ratio") or 0.0)))
         print("Angle report:", turntable.get("angle_report", "-"))
-    print("Database    :", result["database"]); print("Model       :", result["model"])
-    print("Registered  :", stats.get("registered_images", "-"), "/", result["frame_count"]); print("3D Points   :", stats.get("points3D", "-"))
-    print("Track Length:", stats.get("mean_track_length", "-")); print("Reproj Error:", stats.get("mean_reprojection_error", "-")); print("=" * 68)
-    print("[READY] Inspect: python app.py view sparse --run {}".format(run_id)); return 0
-
+    print("Database    :", result["database"])
+    print("Model       :", result["model"])
+    print("Registered  :", stats.get("registered_images", "-"), "/", result["frame_count"])
+    print("3D Points   :", stats.get("points3D", "-"))
+    print("Track Length:", stats.get("mean_track_length", "-"))
+    print("Reproj Error:", stats.get("mean_reprojection_error", "-"))
+    print("=" * 68)
+    print("[READY] Inspect: python Videoto3D.py view sparse --run {}".format(run_id))
+    return 0
 
 def run_view_sparse(resolved, options):
     run_id = validate_run_id(options["run"]); run_root, _ = _require_run(run_id); colmap_dir = run_root / "colmap"
@@ -883,7 +882,7 @@ def run_view_sparse(resolved, options):
         colmap_path=resolved["colmap"], model_path=colmap_dir / "sparse" / "0",
         database_path=colmap_dir / "database.db", image_path=run_root / "frames", cwd=colmap_dir,
     )
-    print("=" * 68); print("Videoto3D V1.3 Shared COLMAP Sparse Viewer"); print("Run   :", run_id); print("PID   :", pid); print("=" * 68)
+    print("=" * 68); print("Videoto3D V1.4 Shared COLMAP Sparse Viewer"); print("Run   :", run_id); print("PID   :", pid); print("=" * 68)
     return 0
 
 def run_mesh(resolved, options):
@@ -912,8 +911,8 @@ def run_mesh(resolved, options):
         textures=[_rel(run_root, item) for item in result["textures"]],
         profile=profile, recipe=_rel(run_root, result["recipe"]) if result.get("recipe") else None,
     )
-    print("=" * 68); print("Videoto3D V1.3 Mesh Route"); print("Run         :", run_id); print("OBJ         :", result["obj"])
-    print("Textures    :", len(result["textures"])); print("Mesh profile:", profile); print("=" * 68); print("[READY] Next: python app.py run glb --run {}".format(run_id)); return 0
+    print("=" * 68); print("Videoto3D V1.4 Mesh Route"); print("Run         :", run_id); print("OBJ         :", result["obj"])
+    print("Textures    :", len(result["textures"])); print("Mesh profile:", profile); print("=" * 68); print("[READY] Next: python Videoto3D.py run glb --run {}".format(run_id)); return 0
 
 def _validate_glb_name(name):
     name = str(name)
@@ -941,10 +940,10 @@ def run_glb(resolved, options):
         exported_to = str(external_output)
     update_route_stage(run_root, "mesh", "glb", "ready", path=_rel(run_root, output_glb), size_bytes=result["size_bytes"], exported_to=exported_to)
     _refresh_quality(run_root)
-    print("=" * 68); print("Videoto3D V1.3 Blender GLB Export"); print("Run   :", run_id); print("Output:", output_glb)
+    print("=" * 68); print("Videoto3D V1.4 Blender GLB Export"); print("Run   :", run_id); print("Output:", output_glb)
     if exported_to: print("Export:", exported_to)
     print("Size  : {:.2f} MB".format(result["size_bytes"] / (1024 * 1024))); print("=" * 68)
-    print("[READY] View: python app.py view glb --run {}".format(run_id)); return 0
+    print("[READY] View: python Videoto3D.py view glb --run {}".format(run_id)); return 0
 
 def _positive_int_option(options, name, default):
     value = options.get(name)
@@ -1008,7 +1007,7 @@ def run_splat_training(resolved, options):
         dataset=_rel(run_root, result["dataset_root"]), recipe=_rel(run_root, result["recipe"]), log=_rel(run_root, result["log"]),
         raw_path=_rel(run_root, result["raw_ply"]), raw_size_bytes=result["raw_size_bytes"],
     )
-    print("=" * 68); print("Videoto3D V1.3 Brush Raw Splat Training"); print("Run        :", run_id)
+    print("=" * 68); print("Videoto3D V1.4 Brush Raw Splat Training"); print("Run        :", run_id)
     print("Object pts : {} / {}".format(report.get("kept_points", "-"), report.get("source_points", "-")))
     print("FG ratio   :", profile["foreground_ratio"]); print("Min FG obs :", profile["min_foreground_observations"])
     print("Steps      :", profile["steps"]); print("Max splats :", profile["max_splats"]); print("Resolution :", profile["max_resolution"])
@@ -1041,7 +1040,7 @@ def run_splat_cleanup(options):
         run_root, "splat", "ply", "ready", path=_rel(run_root, output_ply), size_bytes=output_ply.stat().st_size,
     )
     _refresh_quality(run_root)
-    print("=" * 68); print("Videoto3D V1.3 Splat Cleanup"); print("Run        :", run_id)
+    print("=" * 68); print("Videoto3D V1.4 Splat Cleanup"); print("Run        :", run_id)
     print("Raw splats :", report["raw_splats"]); print("Clean      :", report["clean_splats"])
     print("Removed    : {} ({:.1f}%)".format(report["removed_splats"], report["removal_ratio"] * 100.0))
     print("Mask vote  : ratio >= {} / valid views >= {}".format(profile["cleanup_ratio"], profile["cleanup_min_views"]))
@@ -1142,7 +1141,7 @@ def run_runs_show(options):
     print("  cleanup    : {}{}".format(st(splat, "cleanup"), clean_extra))
     print("  ply        : {}".format(st(splat, "ply")))
     if ply.get("path"): print("               {}".format(run_root / ply["path"]))
-    print(); print("Quality  : python app.py quality --run {}".format(run_id))
+    print(); print("Quality  : python Videoto3D.py quality --run {}".format(run_id))
     print("=" * 68); return 0
 
 
@@ -1230,7 +1229,7 @@ def run_route_mesh(options):
         print("[ROUTE][RUN ] mesh.glb")
         glb_options = {"run": run_id, "output_name": options.get("output_name"), "output": options.get("output")}
         run_glb(_route_toolset(("blender",)), glb_options)
-    print("[READY] Mesh Route complete: python app.py view glb --run {}".format(run_id)); return 0
+    print("[READY] Mesh Route complete: python Videoto3D.py view glb --run {}".format(run_id)); return 0
 
 
 def run_route_splat(options):
@@ -1268,7 +1267,7 @@ def run_route_splat(options):
         clean_options = {"run": run_id, "cleanup_ratio": str(cleanup_desired["cleanup_ratio"]), "cleanup_min_views": str(cleanup_desired["cleanup_min_views"])}
         run_splat_cleanup(clean_options)
     _refresh_quality(run_root)
-    print("[READY] Splat Route complete: python app.py view splat --run {}".format(run_id)); return 0
+    print("[READY] Splat Route complete: python Videoto3D.py view splat --run {}".format(run_id)); return 0
 
 
 def run_quality(options):
@@ -1329,9 +1328,9 @@ def required_tools_for_key(key):
 
 def print_legacy_command_error(parsed):
     print("[ERROR] 命令格式已在 Videoto3D V1.0 更新。")
-    print("旧命令：python app.py {}".format(parsed["legacy"]))
+    print("旧命令：python Videoto3D.py {}".format(parsed["legacy"]))
     print("新命令：{}".format(parsed["replacement"]))
-    print("查看全部命令：python app.py --help 或阅读 README.md")
+    print("查看全部命令：python Videoto3D.py --help 或阅读 README.md")
 
 
 
@@ -1350,7 +1349,7 @@ def run_env_repair(options):
         current = os.path.normcase(os.path.abspath(sys.executable))
         target = os.path.normcase(os.path.abspath(str(environment_python(ROOT, "core"))))
         if current == target:
-            raise RuntimeError("core repair 必须从项目外层 Python 启动：python app.py env repair core")
+            raise RuntimeError("core repair 必须从项目外层 Python 启动：python Videoto3D.py env repair core")
     repair_environment(ROOT, name)
     return 0
 

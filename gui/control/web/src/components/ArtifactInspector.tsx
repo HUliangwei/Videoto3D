@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { AssetViewer, type AssetType } from '@videoto3d/viewer'
 import { api } from '../api'
 import type { ArtifactCatalog, ArtifactItem } from '../types'
@@ -27,6 +27,187 @@ function viewerType(item: ArtifactItem): AssetType | null {
   return null
 }
 
+function ImageViewport({ resetKey, children }: { resetKey: string; children: React.ReactNode }) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{ pointerId: number; x: number; y: number; ox: number; oy: number } | null>(null)
+  const wheelHandlerRef = useRef<(event: WheelEvent) => void>(() => {})
+  const fitScaleRef = useRef(1)
+  const scaleRef = useRef(1)
+  const offsetRef = useRef({ x: 0, y: 0 })
+  const naturalSizeRef = useRef({ width: 0, height: 0 })
+  const readyRef = useRef(false)
+  const manualRef = useRef(false)
+  const [view, setView] = useState({ scale: 1, x: 0, y: 0 })
+  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null)
+  const [dragging, setDragging] = useState(false)
+
+  const applyView = (scale: number, x: number, y: number) => {
+    scaleRef.current = scale
+    offsetRef.current = { x, y }
+    setView({ scale, x, y })
+  }
+
+  const measureFitScale = () => {
+    const host = hostRef.current
+    const size = naturalSizeRef.current
+    if (!host || !readyRef.current || size.width <= 0 || size.height <= 0) return null
+    const rect = host.getBoundingClientRect()
+    const availableWidth = Math.max(rect.width - 36, 1)
+    const availableHeight = Math.max(rect.height - 36, 1)
+    return Math.max(0.01, Math.min(availableWidth / size.width, availableHeight / size.height))
+  }
+
+  const fit = () => {
+    const nextFit = measureFitScale()
+    if (nextFit == null) return
+    manualRef.current = false
+    fitScaleRef.current = nextFit
+    applyView(nextFit, 0, 0)
+  }
+
+  const syncLoadedImages = () => {
+    const content = contentRef.current
+    if (!content) return false
+    const images = Array.from(content.querySelectorAll('img')) as HTMLImageElement[]
+    if (!images.length) return false
+    if (images.some((image) => !image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0)) return false
+    const primary = images[0]
+    naturalSizeRef.current = { width: primary.naturalWidth, height: primary.naturalHeight }
+    readyRef.current = true
+    setNaturalSize({ width: primary.naturalWidth, height: primary.naturalHeight })
+    requestAnimationFrame(fit)
+    return true
+  }
+
+  useEffect(() => {
+    readyRef.current = false
+    manualRef.current = false
+    fitScaleRef.current = 1
+    naturalSizeRef.current = { width: 0, height: 0 }
+    setNaturalSize(null)
+    applyView(1, 0, 0)
+    const frame = requestAnimationFrame(syncLoadedImages)
+    return () => cancelAnimationFrame(frame)
+  }, [resetKey])
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const observer = new ResizeObserver(() => {
+      if (!readyRef.current) return
+      if (!manualRef.current) fit()
+      else {
+        const nextFit = measureFitScale()
+        if (nextFit != null) fitScaleRef.current = nextFit
+      }
+    })
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [])
+
+  const zoomAt = (clientX: number, clientY: number, requestedScale: number) => {
+    const host = hostRef.current
+    if (!host || !readyRef.current) return
+    const fitScale = Math.max(fitScaleRef.current, 0.01)
+    const minScale = fitScale
+    const maxScale = fitScale * 8
+    const currentScale = Math.max(scaleRef.current, 1e-9)
+    const nextScale = Math.min(maxScale, Math.max(minScale, requestedScale))
+
+    // Fit is the hard minimum. Reaching it always re-centers the image so the
+    // complete frame is visible; a previous pan must never survive at min zoom.
+    if (nextScale <= fitScale * 1.001) {
+      manualRef.current = false
+      applyView(fitScale, 0, 0)
+      return
+    }
+    if (Math.abs(nextScale - currentScale) < 1e-8) return
+
+    const rect = host.getBoundingClientRect()
+    const px = clientX - (rect.left + rect.width / 2)
+    const py = clientY - (rect.top + rect.height / 2)
+    const currentOffset = offsetRef.current
+    const localX = (px - currentOffset.x) / currentScale
+    const localY = (py - currentOffset.y) / currentScale
+    manualRef.current = true
+    applyView(nextScale, px - localX * nextScale, py - localY * nextScale)
+  }
+
+  const zoomCenter = (factor: number) => {
+    const host = hostRef.current
+    if (!host) return
+    const rect = host.getBoundingClientRect()
+    zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, scaleRef.current * factor)
+  }
+
+  wheelHandlerRef.current = (event: WheelEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!readyRef.current) return
+    zoomAt(event.clientX, event.clientY, scaleRef.current * (event.deltaY < 0 ? 1.14 : 1 / 1.14))
+  }
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const handler = (event: WheelEvent) => wheelHandlerRef.current(event)
+    host.addEventListener('wheel', handler, { passive: false })
+    return () => host.removeEventListener('wheel', handler)
+  }, [])
+
+  const fitPercent = Math.max(fitScaleRef.current, 0.01)
+  const relativePercent = Math.max(100, Math.round((view.scale / fitPercent) * 100))
+  const maxScale = fitPercent * 8
+
+  return <div
+    ref={hostRef}
+    className={`artifact-image-viewport ${dragging ? 'dragging' : ''}`}
+    onDoubleClick={(event) => { event.preventDefault(); event.stopPropagation(); fit() }}
+    onPointerDown={(event) => {
+      event.stopPropagation()
+      if (event.button !== 0 || !readyRef.current || scaleRef.current <= fitScaleRef.current * 1.001) return
+      event.currentTarget.setPointerCapture(event.pointerId)
+      const offset = offsetRef.current
+      dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, ox: offset.x, oy: offset.y }
+      setDragging(true)
+    }}
+    onPointerMove={(event) => {
+      const drag = dragRef.current
+      if (!drag || drag.pointerId !== event.pointerId) return
+      event.stopPropagation()
+      manualRef.current = true
+      applyView(scaleRef.current, drag.ox + event.clientX - drag.x, drag.oy + event.clientY - drag.y)
+    }}
+    onPointerUp={(event) => {
+      if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null
+      setDragging(false)
+    }}
+    onPointerCancel={() => { dragRef.current = null; setDragging(false) }}
+    onLoadCapture={() => { syncLoadedImages() }}
+  >
+    <div
+      ref={contentRef}
+      className="artifact-image-content"
+      style={{
+        width: naturalSize ? `${naturalSize.width}px` : '1px',
+        height: naturalSize ? `${naturalSize.height}px` : '1px',
+        visibility: naturalSize ? 'visible' : 'hidden',
+        transform: `translate(-50%, -50%) translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
+      }}
+    >
+      {children}
+    </div>
+    <div className="artifact-image-toolbar" onPointerDown={(event) => event.stopPropagation()} onWheel={(event) => { event.preventDefault(); event.stopPropagation() }}>
+      <button onClick={fit} disabled={!naturalSize}>Fit</button>
+      <button onClick={() => zoomCenter(1 / 1.25)} disabled={!naturalSize || view.scale <= fitPercent * 1.001}>−</button>
+      <span>{naturalSize ? `${relativePercent}%` : 'Loading'}</span>
+      <button onClick={() => zoomCenter(1.25)} disabled={!naturalSize || view.scale >= maxScale - 1e-6}>+</button>
+    </div>
+    <div className="artifact-image-hint">Wheel Zoom · Drag Pan · Double Click Fit</div>
+  </div>
+}
+
 function SequencePreview({ item }: { item: ArtifactItem }) {
   const [index, setIndex] = useState(0)
   const [mode, setMode] = useState<'original'|'mask'|'overlay'>('overlay')
@@ -36,14 +217,17 @@ function SequencePreview({ item }: { item: ArtifactItem }) {
   const frame = item.frame_base_url ? `${item.frame_base_url}/${safeIndex}` : ''
   const mask = item.mask_base_url ? `${item.mask_base_url}/${safeIndex}` : ''
   const image = item.image_base_url ? `${item.image_base_url}/${safeIndex}` : frame
+  const resetKey = `${item.key}:${safeIndex}:${mode}`
 
   return <div className="artifact-sequence">
     <div className="artifact-image-stage">
-      {item.kind === 'mask-sequence' ? <>
-        {mode === 'original' && <img src={frame} alt={`${item.label} original ${safeIndex + 1}`} />}
-        {mode === 'mask' && <img src={mask} alt={`${item.label} mask ${safeIndex + 1}`} />}
-        {mode === 'overlay' && <div className="artifact-mask-stack"><img src={frame} alt="Original frame" /><img className="mask-layer" src={mask} alt="SAM2 mask overlay" /></div>}
-      </> : <img src={image} alt={`${item.label} ${safeIndex + 1}`} />}
+      <ImageViewport resetKey={resetKey}>
+        {item.kind === 'mask-sequence' ? <>
+          {mode === 'original' && <img src={frame} alt={`${item.label} original ${safeIndex + 1}`} />}
+          {mode === 'mask' && <img src={mask} alt={`${item.label} mask ${safeIndex + 1}`} />}
+          {mode === 'overlay' && <div className="artifact-mask-stack"><img src={frame} alt="Original frame" /><img className="mask-layer" src={mask} alt="SAM2 mask overlay" /></div>}
+        </> : <img src={image} alt={`${item.label} ${safeIndex + 1}`} />}
+      </ImageViewport>
     </div>
     <div className="artifact-sequence-controls">
       {item.kind === 'mask-sequence' && <div className="artifact-mode-tabs">
@@ -80,6 +264,13 @@ export function ArtifactInspector({ runId, refreshKey = '' }: { runId: string; r
   const [compare, setCompare] = useState<[ArtifactItem, ArtifactItem] | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!selected && !compare) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [selected, compare])
 
   const refresh = async () => {
     setLoading(true)
