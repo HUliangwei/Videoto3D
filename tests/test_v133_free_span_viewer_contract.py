@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 def test_turntable_angle_path_is_free_span_and_graph_based():
-    source = Path("pipeline/turntable_angle.py").read_text(encoding="utf-8")
+    source = Path("pipeline/workflows/turntable/legacy_v13/angle.py").read_text(encoding="utf-8")
     assert "read_pair_rotation_constraints" in source
     assert "solve_free_span_increments" in source
     assert '"adaptive_free_span_graph"' in source
@@ -12,12 +12,12 @@ def test_turntable_angle_path_is_free_span_and_graph_based():
 
 def test_capture_mode_copy_no_longer_promises_360_degrees():
     source = Path("pipeline/capture_mode.py").read_text(encoding="utf-8")
-    assert "Free-span angle graph + robust constraints + SAM2 features" in source
+    assert "Turntable research workflow" in source
     assert "Adaptive 360° poses + SAM2 features" not in source
 
 
 def test_existing_turntable_backend_boundary_is_unchanged():
-    source = Path("pipeline/turntable.py").read_text(encoding="utf-8")
+    source = Path("pipeline/workflows/turntable/legacy_v13/reconstruction.py").read_text(encoding="utf-8")
     assert "estimate_adaptive_turntable_angles" in source
     assert '"point_triangulator"' in source
     assert "build_pose_records(" in source

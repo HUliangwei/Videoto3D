@@ -4,7 +4,7 @@ import sqlite3
 import numpy as np
 import pytest
 
-from pipeline.turntable_angle import (
+from pipeline.workflows.turntable.legacy_v13.angle import (
     cumulative_angles_from_increments,
     estimate_adaptive_turntable_angles,
     estimate_relative_rotation_from_essential,

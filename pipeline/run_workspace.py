@@ -321,10 +321,20 @@ def create_or_load_run(runs_dir, run_id):
 
 
 def update_capture_mode(run_root, capture_mode):
+    """Set the Run capture method once; changing it after source/extract is forbidden."""
     manifest = load_run_manifest(run_root)
-    manifest["capture_mode"] = normalize_capture_mode(capture_mode)
+    requested = normalize_capture_mode(capture_mode)
+    current = normalize_capture_mode(manifest.get("capture_mode", DEFAULT_CAPTURE_MODE))
+    locked = bool(manifest.get("source")) or (
+        manifest.get("shared", {}).get("extract", {}).get("status") == "ready"
+    )
+    if locked and requested != current:
+        raise RuntimeError(
+            "Run capture method is immutable after source import/extraction: "
+            "{} -> {}".format(current, requested)
+        )
+    manifest["capture_mode"] = requested
     return save_run_manifest(run_root, manifest)
-
 
 def update_run_source(run_root, original_input, local_source):
     manifest = load_run_manifest(run_root)
@@ -444,6 +454,7 @@ def list_run_summaries(runs_dir):
         shared_ready = shared == "READY"
         summaries.append({
             "run_id": manifest.get("run_id", child.name),
+            "capture_mode": normalize_capture_mode(manifest.get("capture_mode", DEFAULT_CAPTURE_MODE)),
             "status": run_overall_status(manifest),
             "frames": manifest.get("shared", {}).get("extract", {}).get("frame_count", "-"),
             "shared_status": shared,

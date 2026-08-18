@@ -42,7 +42,7 @@ def conda_prerequisite_message():
     return (
         "Conda not found. Videoto3D A1 requires Anaconda or Miniconda to be installed once.\n"
         "Check: conda --version\n"
-        "After installing Conda, reopen PowerShell/Anaconda Prompt and rerun: python app.py gui"
+        "After installing Conda, reopen PowerShell/Anaconda Prompt and rerun: python Videoto3D.py gui"
     )
 
 

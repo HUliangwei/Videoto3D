@@ -4,7 +4,7 @@ import sqlite3
 import numpy as np
 import pytest
 
-from pipeline.turntable_angle import (
+from pipeline.workflows.turntable.legacy_v13.angle import (
     estimate_adaptive_turntable_angles,
     fit_turntable_rotation_from_correspondences,
     image_ids_to_pair_id,
@@ -238,7 +238,7 @@ def test_constrained_estimator_ignores_misleading_generic_e_rotation(tmp_path):
     rows = con.execute("SELECT pair_id FROM two_view_geometries").fetchall()
     index_by_id = {int(image_id): index for index, image_id in enumerate(image_ids)}
     for (pair_id,) in rows:
-        from pipeline.turntable_angle import pair_id_to_image_ids
+        from pipeline.workflows.turntable.legacy_v13.angle import pair_id_to_image_ids
         id1, id2 = pair_id_to_image_ids(pair_id)
         gap = abs(index_by_id[id2] - index_by_id[id1])
         fake_angle = math.radians(15.0 * gap)

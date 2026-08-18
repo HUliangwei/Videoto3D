@@ -49,4 +49,4 @@ def capture_mode_label(value):
 
 
 def sparse_strategy_label(value):
-    return "Free-span angle graph + robust constraints + SAM2 features" if is_turntable(value) else "Full RGB incremental SfM"
+    return "Turntable research workflow" if is_turntable(value) else "Full RGB incremental SfM"

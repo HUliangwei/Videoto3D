@@ -3,6 +3,7 @@ export type RouteSummary = 'COMPLETE' | 'IN PROGRESS' | 'PENDING' | 'BLOCKED'
 
 export interface RunSummary {
   run_id: string
+  capture_mode: CaptureMode
   status: string
   frames: number | string
   shared_status: string

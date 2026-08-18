@@ -82,7 +82,7 @@ class JobManager:
 
     def start_core(self, run_id, kind, app_args):
         python = environment_python(self.root, "core")
-        command = [str(python), "-u", str(self.root / "app.py"), *[str(x) for x in app_args]]
+        command = [str(python), "-u", str(self.root / "Videoto3D.py"), *[str(x) for x in app_args]]
         return self.start_command(run_id, kind, command)
 
     def start_command(self, run_id, kind, command):

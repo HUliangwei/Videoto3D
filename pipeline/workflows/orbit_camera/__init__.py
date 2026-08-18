@@ -1,0 +1,1 @@
+"""Stable Orbit Camera workflow."""

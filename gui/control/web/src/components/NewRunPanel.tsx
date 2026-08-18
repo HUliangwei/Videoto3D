@@ -23,13 +23,13 @@ export function NewRunPanel({ onClose, onCreated }: { onClose: () => void; onCre
     catch (e) { setError(String(e)); setBusy(false) }
   }
   const modeHelp = captureMode === 'turntable'
-    ? '相机固定，刚体物体旋转。SAM2 Mask 会直接约束 COLMAP 特征；人物必须尽量保持固定姿势。'
-    : '物体静止，相机绕物体移动。Shared COLMAP 使用完整 RGB 特征，背景纹理可辅助位姿恢复。'
+    ? '相机固定，刚体物体旋转。进入独立 Turntable Research 工作流；当前保留 V1.3 pose baseline，后续发展 structured-essential / global-orbit 方法。'
+    : '物体静止，相机绕物体移动。稳定工作流使用完整 RGB COLMAP incremental SfM；SAM2 仅作为后续目标约束。'
   return <div className="modal-backdrop" onMouseDown={onClose}><section className="new-run-modal" onMouseDown={(e) => e.stopPropagation()}>
     <div className="modal-head"><div><div className="eyebrow">CREATE WORKSPACE RUN</div><h2>New Run</h2></div><button className="icon-button" onClick={onClose}>×</button></div>
     <label className="field"><span>Video</span><input type="file" accept="video/*,.mp4,.mov,.avi,.mkv,.webm" onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); if (!runId && f) setRunId(suggestedId(f)) }} /></label>
     <label className="field"><span>Run ID</span><input value={runId} placeholder={hint || 'teddy_002'} onChange={(e) => setRunId(e.target.value)} /></label>
-    <label className="field"><span>Capture Mode</span><select value={captureMode} onChange={(e) => setCaptureMode(e.target.value as CaptureMode)}><option value="orbit_camera">Orbit Camera · object fixed / camera moves</option><option value="turntable">Turntable · camera fixed / rigid object rotates</option></select></label>
+    <label className="field"><span>Capture Method</span><select value={captureMode} onChange={(e) => setCaptureMode(e.target.value as CaptureMode)}><option value="orbit_camera">Orbit Camera · object fixed / camera moves · Stable</option><option value="turntable">Turntable · camera fixed / rigid object rotates · Research</option></select></label>
     <p className="form-help">{modeHelp}</p>
     <p className="form-help">视频会保存到该 Run 的 source/，随后自动执行 FFmpeg 抽帧。</p>
     {error && <div className="inline-error">{error}</div>}

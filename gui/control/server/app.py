@@ -1,4 +1,4 @@
-"""FastAPI application for the Videoto3D V1.3.0 local control Studio."""
+"""FastAPI application for the Videoto3D V1.4 local control Studio."""
 
 import json
 import mimetypes
@@ -111,13 +111,13 @@ def create_app(project_root=None, static_dir=None, shutdown_event=None, job_mana
     static_dir = Path(static_dir).resolve() if static_dir else None
     jobs = job_manager or JobManager(project_root)
 
-    app = FastAPI(title="Videoto3D Studio", version="1.3.0")
+    app = FastAPI(title="Videoto3D Studio", version="1.4.0")
     app.state.project_root = project_root
     app.state.jobs = jobs
 
     @app.get("/api/health")
     def health():
-        return {"status": "ready", "project_root": str(project_root), "version": "1.3.0"}
+        return {"status": "ready", "project_root": str(project_root), "version": "1.4.0"}
 
     @app.get("/api/runs")
     def runs():
@@ -172,6 +172,18 @@ def create_app(project_root=None, static_dir=None, shutdown_event=None, job_mana
             values = _box_from_payload(await request.json())
             box = ",".join(str(x) for x in values)
             return jobs.start_core(run_id, "mask", ["run", "mask", "--run", run_id, "--box", box])
+        except JobConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/api/runs/{run_id}/sparse")
+    def run_sparse_stage(run_id: str):
+        try:
+            detail = get_run_detail(project_root, run_id)
+            if detail.get("shared", {}).get("mask", {}).get("status") != "ready":
+                raise HTTPException(status_code=409, detail="SAM2 mask is not ready; select the subject first")
+            return jobs.start_core(run_id, "sparse", ["run", "sparse", "--run", run_id])
         except JobConflictError as exc:
             raise HTTPException(status_code=409, detail=str(exc))
         except (ValueError, RuntimeError) as exc:

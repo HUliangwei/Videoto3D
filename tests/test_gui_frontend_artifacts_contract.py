@@ -6,11 +6,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class FrontendArtifactContractTests(unittest.TestCase):
-    def test_run_page_mounts_pipeline_artifact_inspector(self):
-        text = (ROOT / 'gui/control/web/src/pages/RunDetailPage.tsx').read_text(encoding='utf-8')
-        self.assertIn("import { ArtifactInspector }", text)
-        self.assertIn('<ArtifactInspector runId={id}', text)
-        self.assertLess(text.index('<ArtifactInspector runId={id}'), text.index('RESULT VIEWER'))
+    def test_capture_workflow_views_mount_pipeline_artifact_inspector(self):
+        base = ROOT / "gui" / "control" / "web" / "src" / "workflows"
+        for rel in (
+            "orbit-camera/OrbitCameraRunView.tsx",
+            "turntable/TurntableRunView.tsx",
+        ):
+            text = (base / rel).read_text(encoding="utf-8")
+            self.assertIn("import { ArtifactInspector }", text)
+            self.assertIn("<ArtifactInspector runId={id}", text)
+            self.assertLess(
+                text.index("<ArtifactInspector runId={id}"),
+                text.index("RESULT VIEWER"),
+            )
 
     def test_artifact_inspector_has_learning_and_ab_preview_controls(self):
         text = (ROOT / 'gui/control/web/src/components/ArtifactInspector.tsx').read_text(encoding='utf-8')

@@ -40,14 +40,14 @@ class TestCanonicalCLI(unittest.TestCase):
     def test_legacy_flat_commands_are_rejected_with_run_scoped_replacement(self):
         result = parse_cli_args(["sparse"])
         self.assertEqual(result["kind"], "legacy")
-        self.assertEqual(result["replacement"], "python app.py run sparse --run <run_id>")
+        self.assertEqual(result["replacement"], "python Videoto3D.py run sparse --run <run_id>")
 
     def test_annotations_are_chinese_and_include_io_and_next_step(self):
         stream = io.StringIO()
         with redirect_stdout(stream):
             print_command_annotation(command_spec("run.mesh"), {"run": "teddy_001"})
         output = stream.getvalue()
-        self.assertIn("命令：python app.py run mesh --run teddy_001", output)
+        self.assertIn("命令：python Videoto3D.py run mesh --run teddy_001", output)
         self.assertIn("说明：", output)
         self.assertIn("输入：", output)
         self.assertIn("输出：", output)
@@ -114,7 +114,7 @@ class TestCanonicalCLI(unittest.TestCase):
             workspace = Path(d) / "workspace"
             run_root, _ = create_or_load_run(workspace / "runs", "teddy_001")
             with patch.object(app, "WORKSPACE", workspace), patch(
-                "app.run_sparse_reconstruction", return_value=fake_result
+                "pipeline.workflows.orbit_camera.workflow.run_sparse_reconstruction", return_value=fake_result
             ) as sparse:
                 code = app.run_sparse(
                     {"colmap": Path("COLMAP.bat")},

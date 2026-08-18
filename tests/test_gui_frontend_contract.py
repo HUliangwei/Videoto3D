@@ -25,8 +25,15 @@ class GuiFrontendContractTests(unittest.TestCase):
     def test_control_web_consumes_reusable_viewer_package(self):
         package = json.loads((self.root / "gui" / "control" / "web" / "package.json").read_text(encoding="utf-8"))
         self.assertIn("@videoto3d/viewer", package["dependencies"])
-        detail = (self.root / "gui" / "control" / "web" / "src" / "pages" / "RunDetailPage.tsx").read_text(encoding="utf-8")
-        self.assertIn("from '@videoto3d/viewer'", detail)
+        base = self.root / "gui" / "control" / "web" / "src" / "workflows"
+        workflow_views = "\n".join(
+            (base / rel).read_text(encoding="utf-8")
+            for rel in (
+                "orbit-camera/OrbitCameraRunView.tsx",
+                "turntable/TurntableRunView.tsx",
+            )
+        )
+        self.assertIn("from '@videoto3d/viewer'", workflow_views)
 
     def test_v110_server_controls_runs_through_core_jobs(self):
         text = (self.root / "gui" / "control" / "server" / "app.py").read_text(encoding="utf-8")

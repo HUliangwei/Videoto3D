@@ -139,7 +139,7 @@ def _resolve_colmap_path(project_root, explicit=None):
 
 
 def _trajectory_from_constraints(constraints, frame_count):
-    from pipeline.turntable_angle import cumulative_angles_from_increments, solve_free_span_increments
+    from pipeline.workflows.turntable.legacy_v13.angle import cumulative_angles_from_increments, solve_free_span_increments
 
     solved = solve_free_span_increments(constraints, frame_count)
     angles = cumulative_angles_from_increments(solved["increments_rad"])
@@ -165,7 +165,7 @@ def _triangulate_estimator(
     estimator_root,
     logs_root,
 ):
-    from pipeline.turntable import (
+    from pipeline.workflows.turntable.legacy_v13.reconstruction import (
         _parse_analyzer_stats,
         _run_stage,
         _triangulator_args,
@@ -216,8 +216,8 @@ def _triangulate_estimator(
 
 
 def run_pose_ab_benchmark(project_root, run_id, colmap_path=None, overwrite=True):
-    from pipeline.turntable import estimate_turntable_translation, read_database_scene
-    from pipeline.turntable_angle import (
+    from pipeline.workflows.turntable.legacy_v13.reconstruction import estimate_turntable_translation, read_database_scene
+    from pipeline.workflows.turntable.legacy_v13.angle import (
         read_pair_rotation_constraints,
         read_turntable_constrained_constraints,
     )

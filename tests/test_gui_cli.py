@@ -12,7 +12,7 @@ class GuiCliTests(unittest.TestCase):
         parsed = parse_cli_args(["gui"])
         self.assertEqual(parsed["kind"], "command")
         self.assertEqual(parsed["key"], "gui")
-        self.assertEqual(command_spec("gui")["command"], "python app.py gui")
+        self.assertEqual(command_spec("gui")["command"], "python Videoto3D.py gui")
 
     def test_gui_runtime_requires_built_frontend(self):
         with TemporaryDirectory() as td:
