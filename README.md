@@ -166,10 +166,34 @@ Capture Method 在 source 导入 / extract 后视为 Run 的不可变属性。�
 
 ---
 
+## Prerequisites（前置依赖）
+
+> 首次使用前，需要本机已安装两项基础工具。项目会在首次启动时**自动创建** Conda 环境并构建前端，无需手动装 Python 包。
+
+| 工具 | 用途 | 检查 |
+|---|---|---|
+| **Anaconda / Miniconda** | 创建 core / seg / gui 隔离环境 | `conda --version` |
+| **Node.js + npm** | 构建 Web 前端（GUI） | `node --version` / `npm --version` |
+
+> 项目自带 `config/envs/{core,seg,gui}.yml` 环境配方，启动时自动 `conda env create/update`；前端由 `gui/control/server/frontend.py` 自动执行 `npm install + npm run build`。
+
+---
+
 ## Quick Start
 
 ```powershell
-cd D:\Desktop\Videoto3D
+# 1) 进入项目目录（clone 下来的目录名即 Videoto3D）
+cd Videoto3D
+
+# 2) 启动 Web Studio（首次会自动建环境 + 构建前端，稍等片刻）
+python Videoto3D.py gui
+
+# 3) 浏览器访问
+#    http://127.0.0.1:8765
+```
+
+```powershell
+cd Videoto3D
 python Videoto3D.py gui
 ```
 
