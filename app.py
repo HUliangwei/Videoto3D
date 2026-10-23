@@ -37,6 +37,15 @@ from pipeline.capture_mode import (
     DEFAULT_CAPTURE_MODE, capture_mode_label, normalize_capture_mode, sparse_mask_path,
 )
 from pipeline.workflows import get_capture_workflow, run_sparse_for_capture
+from pipeline.workflows.turntable.engineering import (
+    run_anchor_stage,
+    run_pairs_stage,
+    run_orbit_stage,
+    run_triangulate_stage,
+    run_sparse_engineering,
+    turntable_stage_ready,
+    invalidate_all_turntable,
+)
 from pipeline.segmentation_runtime import resolve_segmentation_runtime
 from pipeline.env_manager import core_runtime_status, environment_status, repair_environment, environment_python
 from pipeline.segmentation import (
@@ -46,7 +55,7 @@ from pipeline.segmentation import (
     validate_masks,
     prepare_openmvs_masks,
 )
-from pipeline.cli_commands import (
+from pipeline.cli_commands_engineering import (
     command_spec,
     parse_cli_args,
     print_cli_help,
@@ -712,8 +721,9 @@ def _reset_dirs(run_root, names):
 
 
 def invalidate_after_extract(run_root):
-    _reset_dirs(run_root, ("masks", "segmentation", "colmap", "mesh", "splat", "output"))
-    for group in ("shared", "mesh", "splat"):
+    _reset_dirs(run_root, ("masks", "segmentation", "turntable", "colmap", "mesh", "splat", "output"))
+    invalidate_all_turntable(run_root)
+    for group in ("shared", "turntable", "mesh", "splat"):
         _reset_dirs(run_root / "logs", (group,))
     invalidate_shared_stages(run_root, ("mask", "sparse"))
     invalidate_route_stages(run_root, "mesh")
@@ -726,12 +736,14 @@ def invalidate_after_mask(run_root):
     if capture_mode == "turntable":
         # Turntable SfM extracts features through the SAM2 masks, therefore a
         # mask change invalidates the Shared COLMAP model as well.
-        reset_names.append("colmap")
+        reset_names.extend(("turntable", "colmap"))
         for log_path in (run_root / "logs" / "shared").glob("colmap_*.log"):
             log_path.unlink(missing_ok=True)
         invalidate_shared_stages(run_root, ("sparse",))
     _reset_dirs(run_root, tuple(reset_names))
-    _reset_dirs(run_root / "logs", ("mesh", "splat"))
+    if capture_mode == "turntable":
+        invalidate_all_turntable(run_root)
+    _reset_dirs(run_root / "logs", ("turntable", "mesh", "splat"))
     invalidate_route_stages(run_root, "mesh")
     invalidate_route_stages(run_root, "splat")
 
@@ -811,6 +823,39 @@ def run_sparse(resolved, options):
     run_root, manifest = _require_run(run_id)
     capture_mode = normalize_capture_mode(manifest.get("capture_mode", DEFAULT_CAPTURE_MODE))
     workflow = get_capture_workflow(capture_mode)
+    if capture_mode == "turntable":
+        result = run_sparse_engineering(resolved["colmap"], run_root)
+        invalidate_after_sparse(run_root)
+        stats = result["stats"]
+        update_shared_stage(
+            run_root, "sparse", "ready",
+            frame_count=result["frame_count"],
+            registered_images=stats.get("registered_images"),
+            points3D=stats.get("points3D"),
+            mean_track_length=stats.get("mean_track_length"),
+            mean_reprojection_error=stats.get("mean_reprojection_error"),
+            model=_rel(run_root, result["model"]),
+            database=_rel(run_root, result["database"]),
+            capture_mode=capture_mode,
+            workflow=workflow.id,
+            workflow_maturity=workflow.maturity,
+            mask_guided=True,
+            pose_strategy="structured_turntable_known_pose",
+            turntable_anchor="turntable/anchor.json",
+            turntable_pairs="turntable/pairs.json",
+            turntable_orbit="turntable/orbit.json",
+        )
+        print("=" * 68)
+        print("Videoto3D Turntable Sparse Reconstruction")
+        print("Run         :", run_id)
+        print("Capture     :", workflow.label)
+        print("Pose model  : structured_turntable_known_pose")
+        print("Model       :", result["model"])
+        print("Registered  :", stats.get("registered_images", "-"), "/", result["frame_count"])
+        print("3D Points   :", stats.get("points3D", "-"))
+        print("=" * 68)
+        print("[READY] Next: python Videoto3D.py run mesh --run {}".format(run_id))
+        return 0
     outcome = run_sparse_for_capture(
         capture_mode,
         colmap_path=resolved["colmap"],
@@ -877,6 +922,73 @@ def run_sparse(resolved, options):
     print("[READY] Inspect: python Videoto3D.py view sparse --run {}".format(run_id))
     return 0
 
+
+def _turntable_run(options):
+    run_id = validate_run_id(options["run"])
+    run_root, manifest = _require_run(run_id)
+    capture_mode = normalize_capture_mode(
+        manifest.get("capture_mode", DEFAULT_CAPTURE_MODE)
+    )
+    if capture_mode != "turntable":
+        raise RuntimeError(
+            "This command is only valid for capture_mode=turntable; "
+            "Run {} uses {}.".format(run_id, capture_mode)
+        )
+    return run_id, run_root
+
+
+def run_anchor(resolved, options):
+    run_id, run_root = _turntable_run(options)
+    run_anchor_stage(resolved["colmap"], run_root, overwrite=True)
+    print("[READY] Turntable anchor:", run_root / "turntable" / "anchor.json")
+    print("[READY] Next: python Videoto3D.py run pairs --run {}".format(run_id))
+    return 0
+
+
+def run_pairs(options):
+    run_id, run_root = _turntable_run(options)
+    run_pairs_stage(run_root)
+    print("[READY] Turntable pairs:", run_root / "turntable" / "pairs.json")
+    print("[READY] Next: python Videoto3D.py run orbit --run {}".format(run_id))
+    return 0
+
+
+def run_orbit(options):
+    run_id, run_root = _turntable_run(options)
+    result = run_orbit_stage(run_root)
+    print("[READY] Turntable orbit:", run_root / "turntable" / "orbit.json")
+    print("Span   :", result["global_orbit"]["span_deg"])
+    print("[READY] Next: python Videoto3D.py run triangulate --run {}".format(run_id))
+    return 0
+
+
+def run_triangulate(resolved, options):
+    run_id, run_root = _turntable_run(options)
+    result = run_triangulate_stage(resolved["colmap"], run_root, overwrite=True)
+    invalidate_after_sparse(run_root)
+    stats = result["stats"]
+    update_shared_stage(
+        run_root, "sparse", "ready",
+        frame_count=result["frame_count"],
+        registered_images=stats.get("registered_images"),
+        points3D=stats.get("points3D"),
+        mean_track_length=stats.get("mean_track_length"),
+        mean_reprojection_error=stats.get("mean_reprojection_error"),
+        model=_rel(run_root, result["model"]),
+        database=_rel(run_root, result["database"]),
+        capture_mode="turntable",
+        workflow="turntable",
+        workflow_maturity="research",
+        mask_guided=True,
+        pose_strategy="structured_turntable_known_pose",
+        turntable_anchor="turntable/anchor.json",
+        turntable_pairs="turntable/pairs.json",
+        turntable_orbit="turntable/orbit.json",
+    )
+    print("[READY] Turntable sparse:", result["model"])
+    print("[READY] Next: python Videoto3D.py run mesh --run {}".format(run_id))
+    return 0
+
 def run_view_sparse(resolved, options):
     run_id = validate_run_id(options["run"]); run_root, _ = _require_run(run_id); colmap_dir = run_root / "colmap"
     pid = launch_colmap_gui(
@@ -887,7 +999,10 @@ def run_view_sparse(resolved, options):
     return 0
 
 def run_mesh(resolved, options):
-    run_id = validate_run_id(options["run"]); run_root, _ = _require_run(run_id)
+    run_id = validate_run_id(options["run"]); run_root, manifest = _require_run(run_id)
+    capture_mode = normalize_capture_mode(manifest.get("capture_mode", DEFAULT_CAPTURE_MODE))
+    if capture_mode == "turntable" and not turntable_stage_ready(run_root, "triangulate"):
+        raise RuntimeError("Turntable canonical sparse is not ready. Run sparse first: python Videoto3D.py run sparse --run {}".format(run_id))
     profile = _mesh_profile(options)
     frames_dir = run_root / "frames"; masks_dir = run_root / "masks"; sparse_model = run_root / "colmap" / "sparse" / "0"
     mesh_root = run_root / "mesh"
@@ -1192,10 +1307,14 @@ def _route_prepare_shared(options):
         if not ok: raise RuntimeError("Segmentation runtime not ready")
         run_mask(runtime, {"run": run_id})
     manifest = load_run_manifest(run_root)
-    if _route_shared_ready(manifest, "sparse"):
+    turntable_sparse_ready = (
+        current_capture_mode != "turntable"
+        or turntable_stage_ready(run_root, "triangulate")
+    )
+    if _route_shared_ready(manifest, "sparse") and turntable_sparse_ready:
         print("[ROUTE][SKIP] shared.sparse READY")
     else:
-        print("[ROUTE][RUN ] shared.sparse")
+        print("[ROUTE][RUN ] shared.sparse ({})".format(current_capture_mode))
         run_sparse(_route_toolset(("colmap",)), {"run": run_id})
     return run_root, load_run_manifest(run_root)
 
@@ -1415,6 +1534,14 @@ def main():
             return run_mask(runtime, options)
         if key == "view.masks":
             return run_view_masks(runtime, options)
+        if key == "run.anchor":
+            return run_anchor(resolved, options)
+        if key == "run.pairs":
+            return run_pairs(options)
+        if key == "run.orbit":
+            return run_orbit(options)
+        if key == "run.triangulate":
+            return run_triangulate(resolved, options)
         if key == "run.sparse":
             return run_sparse(resolved, options)
         if key == "view.sparse":
