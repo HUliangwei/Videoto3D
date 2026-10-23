@@ -9,6 +9,7 @@ from pathlib import Path
 
 from pipeline.processes import launch_detached
 from pipeline.colmap_object import filter_colmap_points_by_masks
+from pipeline.viewer_snapshot import snapshot_viewer_asset
 
 DEFAULT_STEPS = 30000
 DEFAULT_MAX_SPLATS = 2_000_000
@@ -248,6 +249,10 @@ def launch_brush_viewer(brush_path, splat_path, working_dir=None):
         raise FileNotFoundError("Brush not found: {}".format(brush_path))
     if not splat_path.exists():
         raise FileNotFoundError("Splat PLY not found: {}".format(splat_path))
-    command = build_brush_view_command(brush_path, splat_path)
+    snapshot_path = snapshot_viewer_asset(
+        splat_path,
+        working_dir=working_dir or splat_path.parent,
+    )
+    command = build_brush_view_command(brush_path, snapshot_path)
     process = launch_detached(command, cwd=working_dir or splat_path.parent)
     return process.pid

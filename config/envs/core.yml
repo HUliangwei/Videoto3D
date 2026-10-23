@@ -5,3 +5,5 @@ dependencies:
   - pip
   - numpy>=1.26,<3
   - pillow>=10,<12
+  - pip:
+      - opencv-python-headless==4.13.0.92
